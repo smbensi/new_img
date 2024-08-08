@@ -1,3 +1,5 @@
+# SOURCE: https://github.com/ultralytics/ultralytics/blob/main/ultralytics/data/loaders.py
+
 import glob
 import math
 import os
@@ -193,3 +195,179 @@ class LoadImagesAndVideos:
         """Initialize the dataloader and raise FileNotFoundError id file not found"""
         parent = None
         if isinstance(path, str) and Path(path).suffix == '.txt': # *.txt file with img/vid/dir on each line 
+            parent = Path(path).parent
+            path = Path(path).read_text().splitlines() # list of sources
+        files = []
+        for p in sorted(path) if isinstance(path, (list,tuple)) else [path]:
+            a = str(Path(p).absolute()) # do not use .resolve() https://github.com/ultralytics/ultralytics/issues/2912
+            if '*' in a:
+                files.extend(sorted(glob.glob(a, recursive=True))) # glob
+            elif os.path.isdir(a):
+                files.extend(sorted(glob.glob(os.path.join(a,'*.*')))) # dir
+            elif os.path.isfile(a):
+                files.append(a)   # files (absolute or relative to CWD)
+            elif parent and (parent / p).is_file():
+                files.append(str((parent / p).absolute())) # files (relative to *.txt file parent)
+            else:
+                raise FileNotFoundError(f"{p} does not exist")
+            
+        # Define files as images or videos
+        images, videos = [], []
+        for f in files:
+            suffix = f.split('.')[-1].lower() # Get file extension without the dot and lowercase
+            if suffix in IMG_FORMATS: # TODO add IMG_FORMATS
+                images.append(f)
+            elif suffix in VID_FORMATS: # TODO add VID_FORMATS
+                videos.append(f)
+        ni, nv = len(images), len(videos)
+        
+        self.files = images + videos
+        self.nf = ni + nv # nb of files
+        self.ni = ni      # nb of images
+        self.video_flag = [False] * ni + [True] * nv
+        self.mode = "image"
+        self.vid_stride = vid_stride  # video frame-rate stride
+        self.bs = batch
+        if any(videos):
+            self._new_video(videos[0]) # new video
+        else:
+            self.cap = None
+        if self.nf == 0:
+            raise FileNotFoundError(f"No images or videos found in {p}. {FORMATS_HELP_MSG}") # TODO check FORMATS_HELP_MSG
+        
+    def __iter__(self):
+        """Returns an iterator object for VideoStream or ImageFolder."""
+        self.count = 0
+        return self
+    
+    def __next__(self):
+        """Returns the next batch of images or video frames along with their paths and metadata"""
+        paths, imgs, info = [], [], []
+        while len(imgs) < self.bs:
+            if self.count >= self.nf: # end of file list
+                if imgs:
+                    return paths, imgs, info # return the last partial batch
+                else:
+                    raise StopIteration
+            
+            path = self.files[self.count]
+            if self.video_flag[self.count]:
+                self.mode = 'video'
+                if not self.cap or not self.cap.isOpened():
+                    self._new_video(path)
+                
+                for _ in range(self.vid_stride):
+                    success = self.cap.grab()
+                    if not success:
+                        break # end of video or failure
+                
+                if success:
+                    success, im0 = self.cap.retrieve()
+                    if success:
+                        self.frame += 1 
+                        paths.append(path)
+                        imgs.append(im0)
+                        info.append(f"video {self.count + 1}/{self.nf} (frame {self.frame}/{self.frames}) {path}: ")
+                        if self.frame == self.frames: # end of video
+                            self.count += 1 
+                            self.cap.release()
+                
+                else:
+                    # Move to the next file if the current video ended or failed to open
+                    self.count += 1
+                    if self.cap:
+                        self.cap.release()
+                    if self.count < self.nf:
+                        self._new_video(self.files[self.count])
+            
+            else:
+                self.mode = "image"
+                im0 = cv2.imread(path)  # BGR
+                if im0 is None:
+                    LOGGER.warning(f"WARNING Image read error {path}")
+                else:
+                    paths.append(path)
+                    imgs.append(im0)
+                    info.append(f"image {self.count + 1}/{self.nf} {path}: ")
+                self.count += 1  # move to the next file
+                if self.count >= self.ni: # end of image list
+                    break
+        
+        return paths, imgs, info
+    
+    def _new_video(self, path):
+        """Create a new video capture object for the given path"""
+        self.frame = 0
+        self.cap = cv2.VideoCapture(path)
+        self.fps = int(self.cap.get(cv2.CAP_PROP_FPS))
+        if not self.cap.isOpened():
+            raise FileNotFoundError(f'Failed to open video {path}')
+        self.frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT) / self.vid_stride)
+    
+    def __len__(self):
+        """Returns the number of batches in the object"""
+        return math.ceil(self.nf / self.bs)
+    
+class LoadPilAndNumpy:
+    """
+    Load images from PIL and Numpy arrays for batch processing
+    
+    This class is designed to manage loading and pre-processing of image data from both PIL and Numpy formats
+    It performs basic validation and format conversion to ensure that the images are in the required format for downstream processing
+    
+    Attributes:
+        paths (list): List of image paths or autogenerated filenames.
+        im0 (list): List of images stored as Numpy arrays.
+        mode (str): Type of data being processed, defaults to 'image'
+        bs (int): Batch size, equivalent to the length of 'im0'
+        
+    Methods:
+        _single_check(im): Validate and format a single image to a Numpy array
+    """
+    
+    def __init__(self, im0):
+        """Initialize PIL and Numpy Dataloader"""
+        if not isinstance(im0, list):
+            im0 = [im0]
+        self.paths = [getattr(im, 'filename', f"image{i}.jpg") for i, im in enumerate(im0)]
+        self.im0 = [self._single_check(im) for im in im0]
+        self.mode = 'image'
+        self.bs = len(self.im0)
+        
+    @staticmethod
+    def _single_check(im):
+        """Validate and format an image to numpy array"""
+        assert isinstance(im, (Image.Image, np.ndarray)), f"Expected PIL/np.ndarray image type but got {type(im)}"
+        if isinstance(im, Image.Image):
+            if im.mode != "RGB":
+                im = im.convert("RGB")
+            im = np.asarray(im)[:,:,::-1]
+            im = np.ascontiguousarray(im)
+        return im
+    
+    def __len__(self):
+        """returns the length of the 'im0' attribute"""
+        return len(self.im0)
+    
+    def __next__(self):
+        """Returns batch paths, images, processed images, None, ''."""
+        if self.count == 1: # loop only once as it's batch inference
+            raise StopIteration
+        self.count += 1
+        return self.paths, self.im0, [""] * self.bs
+    
+    def __iter__(self):
+        """Enables iteration for class LoadPILAndNumpy"""
+        self.count = 0
+        return self
+    
+class LoadTensor:  # TODO write LoadTensor
+    pass
+                
+        
+def autocast_list(source):   # TODO write autocast_list
+    pass
+
+
+# Define constants
+LOADERS = (LoadStreams, LoadPilAndNumpy, LoadImagesAndVideos, LoadTensor)

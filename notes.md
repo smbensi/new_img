@@ -3,6 +3,7 @@
 
 ### Question
 - what is a Thread(...., daemon=True)
+- what is np.ascontiguous
 
 ### new feature
 

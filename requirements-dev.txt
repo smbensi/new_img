@@ -1,6 +1,7 @@
 # torch # check if really needed
 # cv2 # in Jetson opencv is tricky 
-
+numpy 
+pillow
 
 
 # for loading youtube video
