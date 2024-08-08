@@ -154,4 +154,42 @@ class LoadStreams:
             
             # Get and remove the first frame from imgs buffer
             if self.buffer:
-                
+                images.append(x.pop(0))
+            
+            # Get the last frame and clear the rest from the imgs buffer
+            else:
+                images.append(x.pop[-1] if x else np.zeros(self.shape[i], dtype=np.uint8))
+                x.clear()
+        
+        return self.sources, images, [""] * self.bs
+    
+    def __len__(self):
+        """return the lenght of the sources objects"""
+        return self.bs # 1E12 frames = 32 streams at 30 FPS for 30 years
+
+class LoadImagesAndVideos:
+    """
+    YOLOv8 image/video dataloader
+    
+    This class manages the loading and preprocessing of image and video data for YOLOv8. It supports loading from various formats, including single image files, video files and list of image and video paths
+    
+    Attributes:
+        files (list): List of image and video file paths
+        nf (int): Total number of files (images and videos)
+        video_flag (list): Flags indicating whether a file is a video (True) or an image (False)
+        mode (str): current mode, 'image' or 'video'
+        vid_stride (int): Stride for video frame rate, defaults to 1
+        bs (int): Batch size, set to 1 for this class
+        cap (cv2.VideoCapture): Video capture object for openCV
+        frame (int): frame counter for video
+        frames (int): Total number of frames in the video
+        count (int): Counter for iteration, initialized at 0 during '__iter__()'
+    
+    Methods:
+        _new_video (path): Create a new cv2.VideoCapture object for a given video path.
+    """
+    
+    def __init__(self, path, batch=1, vid_stride=1):
+        """Initialize the dataloader and raise FileNotFoundError id file not found"""
+        parent = None
+        if isinstance(path, str) and Path(path).suffix == '.txt': # *.txt file with img/vid/dir on each line 

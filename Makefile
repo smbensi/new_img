@@ -1,2 +1,2 @@
 push:
-	git pull; git commit -am "minor fix"; git push
+	git pull; git commit -am "minor add"; git push
