@@ -2,6 +2,7 @@
 # cv2 # in Jetson opencv is tricky 
 numpy 
 pillow
+matplotlib
 
 
 # for loading youtube video

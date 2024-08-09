@@ -4,6 +4,7 @@
 ### Question
 - what is a Thread(...., daemon=True)
 - what is np.ascontiguous
+- understand the set-logging function in utils.__init__
 
 ### new feature
 
