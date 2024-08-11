@@ -15,6 +15,8 @@ import requests
 import torch
 from PIL import Image
 
+from img_xtend.utils import LOGGER
+
 @dataclass
 class SourceTypes:
     """Class to represent various types or input sources for predictions"""
@@ -74,7 +76,7 @@ class LoadStreams:
             # Start thread to read frames from video stream
             st = f"{i+1}/{n}: {s}..."
             if urlparse(s).hostname in {"www.youtube.com", "youtube.com", "youtu.be"}: # if source is youtube video
-                s = get_best_youtube_url(s) # TODO add this function
+                s = get_best_youtube_url(s) # TODO add youtube function
             s = eval(s) if s.isnumeric() else s
             
             self.caps[i] = cv2.VideoCapture(s) # store video capture object 
@@ -94,7 +96,7 @@ class LoadStreams:
             self.imgs[i].append(i)
             self.shape[i] = im.shape
             self.threads[i] = Thread(target=self.update, args=([i, self.caps[i], s]), daemon=True)
-            LOGGER.info(f"{st}Success ✅ ({self.frame[i]} frames of shape {w}x{h} at {self.fps[i]:.2f} FPS)") # TODO add LOGGER
+            LOGGER.info(f"{st}Success ✅ ({self.frame[i]} frames of shape {w}x{h} at {self.fps[i]:.2f} FPS)")
             self.threads[i].start()
         LOGGER.info("")
         
