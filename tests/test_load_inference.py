@@ -1,6 +1,6 @@
 from img_xtend.data.build import load_inference_source
 
-source = "Jake/2022-01-23-180541_1.jpg"
+source = "0"
 
 a = load_inference_source(source)
 print(a.source_type)
