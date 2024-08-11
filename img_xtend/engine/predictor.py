@@ -10,6 +10,7 @@ import numpy as np
 import torch
 
 from img_xtend.utils import LOGGER, ops
+from img_xtend.utils.checks import check_imgsz, check_imshow
 from img_xtend.data.build import load_inference_source
 
 
@@ -55,7 +56,7 @@ class BasePredictor:
             self.args.conf = 0.25 # default conf=0.25
         self.done_warmup = False
         if self.args.show:
-            self.args.show = check_imshow(warn=True)    # TODO add check_imshow
+            self.args.show = check_imshow(warn=True)
         
         # Usable if setup done
         self.model = None
@@ -239,7 +240,6 @@ class BasePredictor:
     def setup_source(self, source):
         """Sets up source and inference mode"""
         self.imgz = check_imgsz(self.args.imgsz, stride=self.model.stride, min_dim=2) # check image size 
-        # TODO add check_imgsz
         self.transforms = (
             getattr(
                 self.model.model,

@@ -1,10 +1,13 @@
 # https://github.com/ultralytics/ultralytics/blob/main/ultralytics/utils/checks.py
 
+import os
 import math
 
+import cv2
+import numpy as np
 import torch
 
-from img_xtend.utils import LOGGER
+from img_xtend.utils import LOGGER, LINUX
 
 def check_imgsz(imgsz, stride=32, min_dim=1, max_dim=2, floor=0):
     """
@@ -57,3 +60,18 @@ def check_imgsz(imgsz, stride=32, min_dim=1, max_dim=2, floor=0):
     sz = [sz[0], sz[0]] if min_dim == 2 and len(sz) == 1 else sz[0] if min_dim == 1 and len(sz) == 1 else sz
 
     return sz
+
+def check_imshow(warn=False):
+    """Check if environment supports image displays"""
+    try:
+        if LINUX:
+            assert "DISPLAY" in os.environ, "The DISPLAY environment variable isn't set."
+        cv2.imshow("test", np.zeros((8,8,3), dtype=np.uint8)) # show a small 8-pixel image
+        cv2.waitKey(1)
+        cv2.destroyAllWindows()
+        cv2.waitKey(1)
+        return True
+    except Exception as e:
+        if warn:
+            LOGGER.warning(f"WARNING ⚠️ Environment does not support cv2.imshow() or PIL Image.show()\n{e}")
+        return False
