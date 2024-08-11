@@ -9,7 +9,7 @@ import torch
 from PIL import Image
 from torch.utils.data import dataloader, distributed
 
-
+from .utils import IMG_FORMATS, VID_FORMATS
 from .loaders import (
     LOADERS,
     LoadImagesAndVideos,
@@ -44,7 +44,7 @@ def check_source(source):
     else:
         raise TypeError("Unsupported image type.")
     
-    return webcam, screenshot, from_img, in_memory, tensor
+    return source, webcam, screenshot, from_img, in_memory, tensor
 
 def load_inference_source(source=None, batch=1, vid_stride=1, buffer=False):
     """

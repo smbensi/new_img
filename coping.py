@@ -1,577 +1,744 @@
 # Ultralytics YOLO 🚀, AGPL-3.0 license
 
+import contextlib
 import glob
+import inspect
 import math
 import os
+import platform
+import re
+import shutil
+import subprocess
 import time
-from dataclasses import dataclass
+from importlib import metadata
 from pathlib import Path
-from threading import Thread
-from urllib.parse import urlparse
+from typing import Optional
 
 import cv2
 import numpy as np
 import requests
 import torch
-from PIL import Image
 
-from ultralytics.data.utils import FORMATS_HELP_MSG, IMG_FORMATS, VID_FORMATS
-from ultralytics.utils import IS_COLAB, IS_KAGGLE, LOGGER, ops
-from ultralytics.utils.checks import check_requirements
+from ultralytics.utils import (
+    ASSETS,
+    AUTOINSTALL,
+    IS_COLAB,
+    IS_JUPYTER,
+    IS_KAGGLE,
+    IS_PIP_PACKAGE,
+    LINUX,
+    LOGGER,
+    ONLINE,
+    PYTHON_VERSION,
+    ROOT,
+    TORCHVISION_VERSION,
+    USER_CONFIG_DIR,
+    Retry,
+    SimpleNamespace,
+    ThreadingLocked,
+    TryExcept,
+    clean_url,
+    colorstr,
+    downloads,
+    emojis,
+    is_github_action_running,
+    url2file,
+)
 
 
-@dataclass
-class SourceTypes:
-    """Class to represent various types of input sources for predictions."""
-
-    stream: bool = False
-    screenshot: bool = False
-    from_img: bool = False
-    tensor: bool = False
-
-
-class LoadStreams:
+def parse_requirements(file_path=ROOT.parent / "requirements.txt", package=""):
     """
-    Stream Loader for various types of video streams, Supports RTSP, RTMP, HTTP, and TCP streams.
-
-    Attributes:
-        sources (str): The source input paths or URLs for the video streams.
-        vid_stride (int): Video frame-rate stride, defaults to 1.
-        buffer (bool): Whether to buffer input streams, defaults to False.
-        running (bool): Flag to indicate if the streaming thread is running.
-        mode (str): Set to 'stream' indicating real-time capture.
-        imgs (list): List of image frames for each stream.
-        fps (list): List of FPS for each stream.
-        frames (list): List of total frames for each stream.
-        threads (list): List of threads for each stream.
-        shape (list): List of shapes for each stream.
-        caps (list): List of cv2.VideoCapture objects for each stream.
-        bs (int): Batch size for processing.
-
-    Methods:
-        __init__: Initialize the stream loader.
-        update: Read stream frames in daemon thread.
-        close: Close stream loader and release resources.
-        __iter__: Returns an iterator object for the class.
-        __next__: Returns source paths, transformed, and original images for processing.
-        __len__: Return the length of the sources object.
-
-    Example:
-         ```bash
-         yolo predict source='rtsp://example.com/media.mp4'
-         ```
-    """
-
-    def __init__(self, sources="file.streams", vid_stride=1, buffer=False):
-        """Initialize instance variables and check for consistent input stream shapes."""
-        torch.backends.cudnn.benchmark = True  # faster for fixed-size inference
-        self.buffer = buffer  # buffer input streams
-        self.running = True  # running flag for Thread
-        self.mode = "stream"
-        self.vid_stride = vid_stride  # video frame-rate stride
-
-        sources = Path(sources).read_text().rsplit() if os.path.isfile(sources) else [sources]
-        n = len(sources)
-        self.bs = n
-        self.fps = [0] * n  # frames per second
-        self.frames = [0] * n
-        self.threads = [None] * n
-        self.caps = [None] * n  # video capture objects
-        self.imgs = [[] for _ in range(n)]  # images
-        self.shape = [[] for _ in range(n)]  # image shapes
-        self.sources = [ops.clean_str(x) for x in sources]  # clean source names for later
-        for i, s in enumerate(sources):  # index, source
-            # Start thread to read frames from video stream
-            st = f"{i + 1}/{n}: {s}... "
-            if urlparse(s).hostname in {"www.youtube.com", "youtube.com", "youtu.be"}:  # if source is YouTube video
-                # YouTube format i.e. 'https://www.youtube.com/watch?v=Zgi9g1ksQHc' or 'https://youtu.be/LNwODJXcvt4'
-                s = get_best_youtube_url(s)
-            s = eval(s) if s.isnumeric() else s  # i.e. s = '0' local webcam
-            if s == 0 and (IS_COLAB or IS_KAGGLE):
-                raise NotImplementedError(
-                    "'source=0' webcam not supported in Colab and Kaggle notebooks. "
-                    "Try running 'source=0' in a local environment."
-                )
-            self.caps[i] = cv2.VideoCapture(s)  # store video capture object
-            if not self.caps[i].isOpened():
-                raise ConnectionError(f"{st}Failed to open {s}")
-            w = int(self.caps[i].get(cv2.CAP_PROP_FRAME_WIDTH))
-            h = int(self.caps[i].get(cv2.CAP_PROP_FRAME_HEIGHT))
-            fps = self.caps[i].get(cv2.CAP_PROP_FPS)  # warning: may return 0 or nan
-            self.frames[i] = max(int(self.caps[i].get(cv2.CAP_PROP_FRAME_COUNT)), 0) or float(
-                "inf"
-            )  # infinite stream fallback
-            self.fps[i] = max((fps if math.isfinite(fps) else 0) % 100, 0) or 30  # 30 FPS fallback
-
-            success, im = self.caps[i].read()  # guarantee first frame
-            if not success or im is None:
-                raise ConnectionError(f"{st}Failed to read images from {s}")
-            self.imgs[i].append(im)
-            self.shape[i] = im.shape
-            self.threads[i] = Thread(target=self.update, args=([i, self.caps[i], s]), daemon=True)
-            LOGGER.info(f"{st}Success ✅ ({self.frames[i]} frames of shape {w}x{h} at {self.fps[i]:.2f} FPS)")
-            self.threads[i].start()
-        LOGGER.info("")  # newline
-
-    def update(self, i, cap, stream):
-        """Read stream `i` frames in daemon thread."""
-        n, f = 0, self.frames[i]  # frame number, frame array
-        while self.running and cap.isOpened() and n < (f - 1):
-            if len(self.imgs[i]) < 30:  # keep a <=30-image buffer
-                n += 1
-                cap.grab()  # .read() = .grab() followed by .retrieve()
-                if n % self.vid_stride == 0:
-                    success, im = cap.retrieve()
-                    if not success:
-                        im = np.zeros(self.shape[i], dtype=np.uint8)
-                        LOGGER.warning("WARNING ⚠️ Video stream unresponsive, please check your IP camera connection.")
-                        cap.open(stream)  # re-open stream if signal was lost
-                    if self.buffer:
-                        self.imgs[i].append(im)
-                    else:
-                        self.imgs[i] = [im]
-            else:
-                time.sleep(0.01)  # wait until the buffer is empty
-
-    def close(self):
-        """Close stream loader and release resources."""
-        self.running = False  # stop flag for Thread
-        for thread in self.threads:
-            if thread.is_alive():
-                thread.join(timeout=5)  # Add timeout
-        for cap in self.caps:  # Iterate through the stored VideoCapture objects
-            try:
-                cap.release()  # release video capture
-            except Exception as e:
-                LOGGER.warning(f"WARNING ⚠️ Could not release VideoCapture object: {e}")
-        cv2.destroyAllWindows()
-
-    def __iter__(self):
-        """Iterates through YOLO image feed and re-opens unresponsive streams."""
-        self.count = -1
-        return self
-
-    def __next__(self):
-        """Returns source paths, transformed and original images for processing."""
-        self.count += 1
-
-        images = []
-        for i, x in enumerate(self.imgs):
-            # Wait until a frame is available in each buffer
-            while not x:
-                if not self.threads[i].is_alive() or cv2.waitKey(1) == ord("q"):  # q to quit
-                    self.close()
-                    raise StopIteration
-                time.sleep(1 / min(self.fps))
-                x = self.imgs[i]
-                if not x:
-                    LOGGER.warning(f"WARNING ⚠️ Waiting for stream {i}")
-
-            # Get and remove the first frame from imgs buffer
-            if self.buffer:
-                images.append(x.pop(0))
-
-            # Get the last frame, and clear the rest from the imgs buffer
-            else:
-                images.append(x.pop(-1) if x else np.zeros(self.shape[i], dtype=np.uint8))
-                x.clear()
-
-        return self.sources, images, [""] * self.bs
-
-    def __len__(self):
-        """Return the length of the sources object."""
-        return self.bs  # 1E12 frames = 32 streams at 30 FPS for 30 years
-
-
-class LoadScreenshots:
-    """
-    YOLOv8 screenshot dataloader.
-
-    This class manages the loading of screenshot images for processing with YOLOv8.
-    Suitable for use with `yolo predict source=screen`.
-
-    Attributes:
-        source (str): The source input indicating which screen to capture.
-        screen (int): The screen number to capture.
-        left (int): The left coordinate for screen capture area.
-        top (int): The top coordinate for screen capture area.
-        width (int): The width of the screen capture area.
-        height (int): The height of the screen capture area.
-        mode (str): Set to 'stream' indicating real-time capture.
-        frame (int): Counter for captured frames.
-        sct (mss.mss): Screen capture object from `mss` library.
-        bs (int): Batch size, set to 1.
-        monitor (dict): Monitor configuration details.
-
-    Methods:
-        __iter__: Returns an iterator object.
-        __next__: Captures the next screenshot and returns it.
-    """
-
-    def __init__(self, source):
-        """Source = [screen_number left top width height] (pixels)."""
-        check_requirements("mss")
-        import mss  # noqa
-
-        source, *params = source.split()
-        self.screen, left, top, width, height = 0, None, None, None, None  # default to full screen 0
-        if len(params) == 1:
-            self.screen = int(params[0])
-        elif len(params) == 4:
-            left, top, width, height = (int(x) for x in params)
-        elif len(params) == 5:
-            self.screen, left, top, width, height = (int(x) for x in params)
-        self.mode = "stream"
-        self.frame = 0
-        self.sct = mss.mss()
-        self.bs = 1
-        self.fps = 30
-
-        # Parse monitor shape
-        monitor = self.sct.monitors[self.screen]
-        self.top = monitor["top"] if top is None else (monitor["top"] + top)
-        self.left = monitor["left"] if left is None else (monitor["left"] + left)
-        self.width = width or monitor["width"]
-        self.height = height or monitor["height"]
-        self.monitor = {"left": self.left, "top": self.top, "width": self.width, "height": self.height}
-
-    def __iter__(self):
-        """Returns an iterator of the object."""
-        return self
-
-    def __next__(self):
-        """mss screen capture: get raw pixels from the screen as np array."""
-        im0 = np.asarray(self.sct.grab(self.monitor))[:, :, :3]  # BGRA to BGR
-        s = f"screen {self.screen} (LTWH): {self.left},{self.top},{self.width},{self.height}: "
-
-        self.frame += 1
-        return [str(self.screen)], [im0], [s]  # screen, img, string
-
-
-class LoadImagesAndVideos:
-    """
-    YOLOv8 image/video dataloader.
-
-    This class manages the loading and pre-processing of image and video data for YOLOv8. It supports loading from
-    various formats, including single image files, video files, and lists of image and video paths.
-
-    Attributes:
-        files (list): List of image and video file paths.
-        nf (int): Total number of files (images and videos).
-        video_flag (list): Flags indicating whether a file is a video (True) or an image (False).
-        mode (str): Current mode, 'image' or 'video'.
-        vid_stride (int): Stride for video frame-rate, defaults to 1.
-        bs (int): Batch size, set to 1 for this class.
-        cap (cv2.VideoCapture): Video capture object for OpenCV.
-        frame (int): Frame counter for video.
-        frames (int): Total number of frames in the video.
-        count (int): Counter for iteration, initialized at 0 during `__iter__()`.
-
-    Methods:
-        _new_video(path): Create a new cv2.VideoCapture object for a given video path.
-    """
-
-    def __init__(self, path, batch=1, vid_stride=1):
-        """Initialize the Dataloader and raise FileNotFoundError if file not found."""
-        parent = None
-        if isinstance(path, str) and Path(path).suffix == ".txt":  # *.txt file with img/vid/dir on each line
-            parent = Path(path).parent
-            path = Path(path).read_text().splitlines()  # list of sources
-        files = []
-        for p in sorted(path) if isinstance(path, (list, tuple)) else [path]:
-            a = str(Path(p).absolute())  # do not use .resolve() https://github.com/ultralytics/ultralytics/issues/2912
-            if "*" in a:
-                files.extend(sorted(glob.glob(a, recursive=True)))  # glob
-            elif os.path.isdir(a):
-                files.extend(sorted(glob.glob(os.path.join(a, "*.*"))))  # dir
-            elif os.path.isfile(a):
-                files.append(a)  # files (absolute or relative to CWD)
-            elif parent and (parent / p).is_file():
-                files.append(str((parent / p).absolute()))  # files (relative to *.txt file parent)
-            else:
-                raise FileNotFoundError(f"{p} does not exist")
-
-        # Define files as images or videos
-        images, videos = [], []
-        for f in files:
-            suffix = f.split(".")[-1].lower()  # Get file extension without the dot and lowercase
-            if suffix in IMG_FORMATS:
-                images.append(f)
-            elif suffix in VID_FORMATS:
-                videos.append(f)
-        ni, nv = len(images), len(videos)
-
-        self.files = images + videos
-        self.nf = ni + nv  # number of files
-        self.ni = ni  # number of images
-        self.video_flag = [False] * ni + [True] * nv
-        self.mode = "image"
-        self.vid_stride = vid_stride  # video frame-rate stride
-        self.bs = batch
-        if any(videos):
-            self._new_video(videos[0])  # new video
-        else:
-            self.cap = None
-        if self.nf == 0:
-            raise FileNotFoundError(f"No images or videos found in {p}. {FORMATS_HELP_MSG}")
-
-    def __iter__(self):
-        """Returns an iterator object for VideoStream or ImageFolder."""
-        self.count = 0
-        return self
-
-    def __next__(self):
-        """Returns the next batch of images or video frames along with their paths and metadata."""
-        paths, imgs, info = [], [], []
-        while len(imgs) < self.bs:
-            if self.count >= self.nf:  # end of file list
-                if imgs:
-                    return paths, imgs, info  # return last partial batch
-                else:
-                    raise StopIteration
-
-            path = self.files[self.count]
-            if self.video_flag[self.count]:
-                self.mode = "video"
-                if not self.cap or not self.cap.isOpened():
-                    self._new_video(path)
-
-                for _ in range(self.vid_stride):
-                    success = self.cap.grab()
-                    if not success:
-                        break  # end of video or failure
-
-                if success:
-                    success, im0 = self.cap.retrieve()
-                    if success:
-                        self.frame += 1
-                        paths.append(path)
-                        imgs.append(im0)
-                        info.append(f"video {self.count + 1}/{self.nf} (frame {self.frame}/{self.frames}) {path}: ")
-                        if self.frame == self.frames:  # end of video
-                            self.count += 1
-                            self.cap.release()
-                else:
-                    # Move to the next file if the current video ended or failed to open
-                    self.count += 1
-                    if self.cap:
-                        self.cap.release()
-                    if self.count < self.nf:
-                        self._new_video(self.files[self.count])
-            else:
-                self.mode = "image"
-                im0 = cv2.imread(path)  # BGR
-                if im0 is None:
-                    LOGGER.warning(f"WARNING ⚠️ Image Read Error {path}")
-                else:
-                    paths.append(path)
-                    imgs.append(im0)
-                    info.append(f"image {self.count + 1}/{self.nf} {path}: ")
-                self.count += 1  # move to the next file
-                if self.count >= self.ni:  # end of image list
-                    break
-
-        return paths, imgs, info
-
-    def _new_video(self, path):
-        """Creates a new video capture object for the given path."""
-        self.frame = 0
-        self.cap = cv2.VideoCapture(path)
-        self.fps = int(self.cap.get(cv2.CAP_PROP_FPS))
-        if not self.cap.isOpened():
-            raise FileNotFoundError(f"Failed to open video {path}")
-        self.frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT) / self.vid_stride)
-
-    def __len__(self):
-        """Returns the number of batches in the object."""
-        return math.ceil(self.nf / self.bs)  # number of files
-
-
-class LoadPilAndNumpy:
-    """
-    Load images from PIL and Numpy arrays for batch processing.
-
-    This class is designed to manage loading and pre-processing of image data from both PIL and Numpy formats.
-    It performs basic validation and format conversion to ensure that the images are in the required format for
-    downstream processing.
-
-    Attributes:
-        paths (list): List of image paths or autogenerated filenames.
-        im0 (list): List of images stored as Numpy arrays.
-        mode (str): Type of data being processed, defaults to 'image'.
-        bs (int): Batch size, equivalent to the length of `im0`.
-
-    Methods:
-        _single_check(im): Validate and format a single image to a Numpy array.
-    """
-
-    def __init__(self, im0):
-        """Initialize PIL and Numpy Dataloader."""
-        if not isinstance(im0, list):
-            im0 = [im0]
-        self.paths = [getattr(im, "filename", f"image{i}.jpg") for i, im in enumerate(im0)]
-        self.im0 = [self._single_check(im) for im in im0]
-        self.mode = "image"
-        self.bs = len(self.im0)
-
-    @staticmethod
-    def _single_check(im):
-        """Validate and format an image to numpy array."""
-        assert isinstance(im, (Image.Image, np.ndarray)), f"Expected PIL/np.ndarray image type, but got {type(im)}"
-        if isinstance(im, Image.Image):
-            if im.mode != "RGB":
-                im = im.convert("RGB")
-            im = np.asarray(im)[:, :, ::-1]
-            im = np.ascontiguousarray(im)  # contiguous
-        return im
-
-    def __len__(self):
-        """Returns the length of the 'im0' attribute."""
-        return len(self.im0)
-
-    def __next__(self):
-        """Returns batch paths, images, processed images, None, ''."""
-        if self.count == 1:  # loop only once as it's batch inference
-            raise StopIteration
-        self.count += 1
-        return self.paths, self.im0, [""] * self.bs
-
-    def __iter__(self):
-        """Enables iteration for class LoadPilAndNumpy."""
-        self.count = 0
-        return self
-
-
-class LoadTensor:
-    """
-    Load images from torch.Tensor data.
-
-    This class manages the loading and pre-processing of image data from PyTorch tensors for further processing.
-
-    Attributes:
-        im0 (torch.Tensor): The input tensor containing the image(s).
-        bs (int): Batch size, inferred from the shape of `im0`.
-        mode (str): Current mode, set to 'image'.
-        paths (list): List of image paths or filenames.
-        count (int): Counter for iteration, initialized at 0 during `__iter__()`.
-
-    Methods:
-        _single_check(im, stride): Validate and possibly modify the input tensor.
-    """
-
-    def __init__(self, im0) -> None:
-        """Initialize Tensor Dataloader."""
-        self.im0 = self._single_check(im0)
-        self.bs = self.im0.shape[0]
-        self.mode = "image"
-        self.paths = [getattr(im, "filename", f"image{i}.jpg") for i, im in enumerate(im0)]
-
-    @staticmethod
-    def _single_check(im, stride=32):
-        """Validate and format an image to torch.Tensor."""
-        s = (
-            f"WARNING ⚠️ torch.Tensor inputs should be BCHW i.e. shape(1, 3, 640, 640) "
-            f"divisible by stride {stride}. Input shape{tuple(im.shape)} is incompatible."
-        )
-        if len(im.shape) != 4:
-            if len(im.shape) != 3:
-                raise ValueError(s)
-            LOGGER.warning(s)
-            im = im.unsqueeze(0)
-        if im.shape[2] % stride or im.shape[3] % stride:
-            raise ValueError(s)
-        if im.max() > 1.0 + torch.finfo(im.dtype).eps:  # torch.float32 eps is 1.2e-07
-            LOGGER.warning(
-                f"WARNING ⚠️ torch.Tensor inputs should be normalized 0.0-1.0 but max value is {im.max()}. "
-                f"Dividing input by 255."
-            )
-            im = im.float() / 255.0
-
-        return im
-
-    def __iter__(self):
-        """Returns an iterator object."""
-        self.count = 0
-        return self
-
-    def __next__(self):
-        """Return next item in the iterator."""
-        if self.count == 1:
-            raise StopIteration
-        self.count += 1
-        return self.paths, self.im0, [""] * self.bs
-
-    def __len__(self):
-        """Returns the batch size."""
-        return self.bs
-
-
-def autocast_list(source):
-    """Merges a list of source of different types into a list of numpy arrays or PIL images."""
-    files = []
-    for im in source:
-        if isinstance(im, (str, Path)):  # filename or uri
-            files.append(Image.open(requests.get(im, stream=True).raw if str(im).startswith("http") else im))
-        elif isinstance(im, (Image.Image, np.ndarray)):  # PIL or np Image
-            files.append(im)
-        else:
-            raise TypeError(
-                f"type {type(im).__name__} is not a supported Ultralytics prediction source type. \n"
-                f"See https://docs.ultralytics.com/modes/predict for supported source types."
-            )
-
-    return files
-
-
-def get_best_youtube_url(url, method="pytube"):
-    """
-    Retrieves the URL of the best quality MP4 video stream from a given YouTube video.
-
-    This function uses the specified method to extract the video info from YouTube. It supports the following methods:
-    - "pytube": Uses the pytube library to fetch the video streams.
-    - "pafy": Uses the pafy library to fetch the video streams.
-    - "yt-dlp": Uses the yt-dlp library to fetch the video streams.
-
-    The function then finds the highest quality MP4 format that has a video codec but no audio codec, and returns the
-    URL of this video stream.
+    Parse a requirements.txt file, ignoring lines that start with '#' and any text after '#'.
 
     Args:
-        url (str): The URL of the YouTube video.
-        method (str): The method to use for extracting video info. Default is "pytube". Other options are "pafy" and
-            "yt-dlp".
+        file_path (Path): Path to the requirements.txt file.
+        package (str, optional): Python package to use instead of requirements.txt file, i.e. package='ultralytics'.
 
     Returns:
-        (str): The URL of the best quality MP4 video stream, or None if no suitable stream is found.
+        (List[Dict[str, str]]): List of parsed requirements as dictionaries with `name` and `specifier` keys.
+
+    Example:
+        ```python
+        from ultralytics.utils.checks import parse_requirements
+
+        parse_requirements(package='ultralytics')
+        ```
     """
-    if method == "pytube":
-        # Switched from pytube to pytubefix to resolve https://github.com/pytube/pytube/issues/1954
-        check_requirements("pytubefix>=6.5.2")
-        from pytubefix import YouTube
 
-        streams = YouTube(url).streams.filter(file_extension="mp4", only_video=True)
-        streams = sorted(streams, key=lambda s: s.resolution, reverse=True)  # sort streams by resolution
-        for stream in streams:
-            if stream.resolution and int(stream.resolution[:-1]) >= 1080:  # check if resolution is at least 1080p
-                return stream.url
+    if package:
+        requires = [x for x in metadata.distribution(package).requires if "extra == " not in x]
+    else:
+        requires = Path(file_path).read_text().splitlines()
 
-    elif method == "pafy":
-        check_requirements(("pafy", "youtube_dl==2020.12.2"))
-        import pafy  # noqa
+    requirements = []
+    for line in requires:
+        line = line.strip()
+        if line and not line.startswith("#"):
+            line = line.split("#")[0].strip()  # ignore inline comments
+            match = re.match(r"([a-zA-Z0-9-_]+)\s*([<>!=~]+.*)?", line)
+            if match:
+                requirements.append(SimpleNamespace(name=match[1], specifier=match[2].strip() if match[2] else ""))
 
-        return pafy.new(url).getbestvideo(preftype="mp4").url
+    return requirements
 
-    elif method == "yt-dlp":
-        check_requirements("yt-dlp")
-        import yt_dlp
 
-        with yt_dlp.YoutubeDL({"quiet": True}) as ydl:
-            info_dict = ydl.extract_info(url, download=False)  # extract info
-        for f in reversed(info_dict.get("formats", [])):  # reversed because best is usually last
-            # Find a format with video codec, no audio, *.mp4 extension at least 1920x1080 size
-            good_size = (f.get("width") or 0) >= 1920 or (f.get("height") or 0) >= 1080
-            if good_size and f["vcodec"] != "none" and f["acodec"] == "none" and f["ext"] == "mp4":
-                return f.get("url")
+def parse_version(version="0.0.0") -> tuple:
+    """
+    Convert a version string to a tuple of integers, ignoring any extra non-numeric string attached to the version. This
+    function replaces deprecated 'pkg_resources.parse_version(v)'.
+
+    Args:
+        version (str): Version string, i.e. '2.0.1+cpu'
+
+    Returns:
+        (tuple): Tuple of integers representing the numeric part of the version and the extra string, i.e. (2, 0, 1)
+    """
+    try:
+        return tuple(map(int, re.findall(r"\d+", version)[:3]))  # '2.0.1+cpu' -> (2, 0, 1)
+    except Exception as e:
+        LOGGER.warning(f"WARNING ⚠️ failure for parse_version({version}), returning (0, 0, 0): {e}")
+        return 0, 0, 0
+
+
+def is_ascii(s) -> bool:
+    """
+    Check if a string is composed of only ASCII characters.
+
+    Args:
+        s (str): String to be checked.
+
+    Returns:
+        (bool): True if the string is composed only of ASCII characters, False otherwise.
+    """
+    # Convert list, tuple, None, etc. to string
+    s = str(s)
+
+    # Check if the string is composed of only ASCII characters
+    return all(ord(c) < 128 for c in s)
+
+
+def check_imgsz(imgsz, stride=32, min_dim=1, max_dim=2, floor=0):
+    """
+    Verify image size is a multiple of the given stride in each dimension. If the image size is not a multiple of the
+    stride, update it to the nearest multiple of the stride that is greater than or equal to the given floor value.
+
+    Args:
+        imgsz (int | cList[int]): Image size.
+        stride (int): Stride value.
+        min_dim (int): Minimum number of dimensions.
+        max_dim (int): Maximum number of dimensions.
+        floor (int): Minimum allowed value for image size.
+
+    Returns:
+        (List[int]): Updated image size.
+    """
+    # Convert stride to integer if it is a tensor
+    stride = int(stride.max() if isinstance(stride, torch.Tensor) else stride)
+
+    # Convert image size to list if it is an integer
+    if isinstance(imgsz, int):
+        imgsz = [imgsz]
+    elif isinstance(imgsz, (list, tuple)):
+        imgsz = list(imgsz)
+    elif isinstance(imgsz, str):  # i.e. '640' or '[640,640]'
+        imgsz = [int(imgsz)] if imgsz.isnumeric() else eval(imgsz)
+    else:
+        raise TypeError(
+            f"'imgsz={imgsz}' is of invalid type {type(imgsz).__name__}. "
+            f"Valid imgsz types are int i.e. 'imgsz=640' or list i.e. 'imgsz=[640,640]'"
+        )
+
+    # Apply max_dim
+    if len(imgsz) > max_dim:
+        msg = (
+            "'train' and 'val' imgsz must be an integer, while 'predict' and 'export' imgsz may be a [h, w] list "
+            "or an integer, i.e. 'yolo export imgsz=640,480' or 'yolo export imgsz=640'"
+        )
+        if max_dim != 1:
+            raise ValueError(f"imgsz={imgsz} is not a valid image size. {msg}")
+        LOGGER.warning(f"WARNING ⚠️ updating to 'imgsz={max(imgsz)}'. {msg}")
+        imgsz = [max(imgsz)]
+    # Make image size a multiple of the stride
+    sz = [max(math.ceil(x / stride) * stride, floor) for x in imgsz]
+
+    # Print warning message if image size was updated
+    if sz != imgsz:
+        LOGGER.warning(f"WARNING ⚠️ imgsz={imgsz} must be multiple of max stride {stride}, updating to {sz}")
+
+    # Add missing dimensions if necessary
+    sz = [sz[0], sz[0]] if min_dim == 2 and len(sz) == 1 else sz[0] if min_dim == 1 and len(sz) == 1 else sz
+
+    return sz
+
+
+def check_version(
+    current: str = "0.0.0",
+    required: str = "0.0.0",
+    name: str = "version",
+    hard: bool = False,
+    verbose: bool = False,
+    msg: str = "",
+) -> bool:
+    """
+    Check current version against the required version or range.
+
+    Args:
+        current (str): Current version or package name to get version from.
+        required (str): Required version or range (in pip-style format).
+        name (str, optional): Name to be used in warning message.
+        hard (bool, optional): If True, raise an AssertionError if the requirement is not met.
+        verbose (bool, optional): If True, print warning message if requirement is not met.
+        msg (str, optional): Extra message to display if verbose.
+
+    Returns:
+        (bool): True if requirement is met, False otherwise.
+
+    Example:
+        ```python
+        # Check if current version is exactly 22.04
+        check_version(current='22.04', required='==22.04')
+
+        # Check if current version is greater than or equal to 22.04
+        check_version(current='22.10', required='22.04')  # assumes '>=' inequality if none passed
+
+        # Check if current version is less than or equal to 22.04
+        check_version(current='22.04', required='<=22.04')
+
+        # Check if current version is between 20.04 (inclusive) and 22.04 (exclusive)
+        check_version(current='21.10', required='>20.04,<22.04')
+        ```
+    """
+    if not current:  # if current is '' or None
+        LOGGER.warning(f"WARNING ⚠️ invalid check_version({current}, {required}) requested, please check values.")
+        return True
+    elif not current[0].isdigit():  # current is package name rather than version string, i.e. current='ultralytics'
+        try:
+            name = current  # assigned package name to 'name' arg
+            current = metadata.version(current)  # get version string from package name
+        except metadata.PackageNotFoundError as e:
+            if hard:
+                raise ModuleNotFoundError(emojis(f"WARNING ⚠️ {current} package is required but not installed")) from e
+            else:
+                return False
+
+    if not required:  # if required is '' or None
+        return True
+
+    op = ""
+    version = ""
+    result = True
+    c = parse_version(current)  # '1.2.3' -> (1, 2, 3)
+    for r in required.strip(",").split(","):
+        op, version = re.match(r"([^0-9]*)([\d.]+)", r).groups()  # split '>=22.04' -> ('>=', '22.04')
+        v = parse_version(version)  # '1.2.3' -> (1, 2, 3)
+        if op == "==" and c != v:
+            result = False
+        elif op == "!=" and c == v:
+            result = False
+        elif op in {">=", ""} and not (c >= v):  # if no constraint passed assume '>=required'
+            result = False
+        elif op == "<=" and not (c <= v):
+            result = False
+        elif op == ">" and not (c > v):
+            result = False
+        elif op == "<" and not (c < v):
+            result = False
+    if not result:
+        warning = f"WARNING ⚠️ {name}{op}{version} is required, but {name}=={current} is currently installed {msg}"
+        if hard:
+            raise ModuleNotFoundError(emojis(warning))  # assert version requirements met
+        if verbose:
+            LOGGER.warning(warning)
+    return result
+
+
+def check_latest_pypi_version(package_name="ultralytics"):
+    """
+    Returns the latest version of a PyPI package without downloading or installing it.
+
+    Parameters:
+        package_name (str): The name of the package to find the latest version for.
+
+    Returns:
+        (str): The latest version of the package.
+    """
+    with contextlib.suppress(Exception):
+        requests.packages.urllib3.disable_warnings()  # Disable the InsecureRequestWarning
+        response = requests.get(f"https://pypi.org/pypi/{package_name}/json", timeout=3)
+        if response.status_code == 200:
+            return response.json()["info"]["version"]
+
+
+def check_pip_update_available():
+    """
+    Checks if a new version of the ultralytics package is available on PyPI.
+
+    Returns:
+        (bool): True if an update is available, False otherwise.
+    """
+    if ONLINE and IS_PIP_PACKAGE:
+        with contextlib.suppress(Exception):
+            from ultralytics import __version__
+
+            latest = check_latest_pypi_version()
+            if check_version(__version__, f"<{latest}"):  # check if current version is < latest version
+                LOGGER.info(
+                    f"New https://pypi.org/project/ultralytics/{latest} available 😃 "
+                    f"Update with 'pip install -U ultralytics'"
+                )
+                return True
+    return False
+
+
+@ThreadingLocked()
+def check_font(font="Arial.ttf"):
+    """
+    Find font locally or download to user's configuration directory if it does not already exist.
+
+    Args:
+        font (str): Path or name of font.
+
+    Returns:
+        file (Path): Resolved font file path.
+    """
+    from matplotlib import font_manager
+
+    # Check USER_CONFIG_DIR
+    name = Path(font).name
+    file = USER_CONFIG_DIR / name
+    if file.exists():
+        return file
+
+    # Check system fonts
+    matches = [s for s in font_manager.findSystemFonts() if font in s]
+    if any(matches):
+        return matches[0]
+
+    # Download to USER_CONFIG_DIR if missing
+    url = f"https://github.com/ultralytics/assets/releases/download/v0.0.0/{name}"
+    if downloads.is_url(url, check=True):
+        downloads.safe_download(url=url, file=file)
+        return file
+
+
+def check_python(minimum: str = "3.8.0", hard: bool = True) -> bool:
+    """
+    Check current python version against the required minimum version.
+
+    Args:
+        minimum (str): Required minimum version of python.
+        hard (bool, optional): If True, raise an AssertionError if the requirement is not met.
+
+    Returns:
+        (bool): Whether the installed Python version meets the minimum constraints.
+    """
+    return check_version(PYTHON_VERSION, minimum, name="Python", hard=hard)
+
+
+@TryExcept()
+def check_requirements(requirements=ROOT.parent / "requirements.txt", exclude=(), install=True, cmds=""):
+    """
+    Check if installed dependencies meet YOLOv8 requirements and attempt to auto-update if needed.
+
+    Args:
+        requirements (Union[Path, str, List[str]]): Path to a requirements.txt file, a single package requirement as a
+            string, or a list of package requirements as strings.
+        exclude (Tuple[str]): Tuple of package names to exclude from checking.
+        install (bool): If True, attempt to auto-update packages that don't meet requirements.
+        cmds (str): Additional commands to pass to the pip install command when auto-updating.
+
+    Example:
+        ```python
+        from ultralytics.utils.checks import check_requirements
+
+        # Check a requirements.txt file
+        check_requirements('path/to/requirements.txt')
+
+        # Check a single package
+        check_requirements('ultralytics>=8.0.0')
+
+        # Check multiple packages
+        check_requirements(['numpy', 'ultralytics>=8.0.0'])
+        ```
+    """
+
+    prefix = colorstr("red", "bold", "requirements:")
+    check_python()  # check python version
+    check_torchvision()  # check torch-torchvision compatibility
+    if isinstance(requirements, Path):  # requirements.txt file
+        file = requirements.resolve()
+        assert file.exists(), f"{prefix} {file} not found, check failed."
+        requirements = [f"{x.name}{x.specifier}" for x in parse_requirements(file) if x.name not in exclude]
+    elif isinstance(requirements, str):
+        requirements = [requirements]
+
+    pkgs = []
+    for r in requirements:
+        r_stripped = r.split("/")[-1].replace(".git", "")  # replace git+https://org/repo.git -> 'repo'
+        match = re.match(r"([a-zA-Z0-9-_]+)([<>!=~]+.*)?", r_stripped)
+        name, required = match[1], match[2].strip() if match[2] else ""
+        try:
+            assert check_version(metadata.version(name), required)  # exception if requirements not met
+        except (AssertionError, metadata.PackageNotFoundError):
+            pkgs.append(r)
+
+    @Retry(times=2, delay=1)
+    def attempt_install(packages, commands):
+        """Attempt pip install command with retries on failure."""
+        return subprocess.check_output(f"pip install --no-cache-dir {packages} {commands}", shell=True).decode()
+
+    s = " ".join(f'"{x}"' for x in pkgs)  # console string
+    if s:
+        if install and AUTOINSTALL:  # check environment variable
+            n = len(pkgs)  # number of packages updates
+            LOGGER.info(f"{prefix} Ultralytics requirement{'s' * (n > 1)} {pkgs} not found, attempting AutoUpdate...")
+            try:
+                t = time.time()
+                assert ONLINE, "AutoUpdate skipped (offline)"
+                LOGGER.info(attempt_install(s, cmds))
+                dt = time.time() - t
+                LOGGER.info(
+                    f"{prefix} AutoUpdate success ✅ {dt:.1f}s, installed {n} package{'s' * (n > 1)}: {pkgs}\n"
+                    f"{prefix} ⚠️ {colorstr('bold', 'Restart runtime or rerun command for updates to take effect')}\n"
+                )
+            except Exception as e:
+                LOGGER.warning(f"{prefix} ❌ {e}")
+                return False
+        else:
+            return False
+
+    return True
+
+
+def check_torchvision():
+    """
+    Checks the installed versions of PyTorch and Torchvision to ensure they're compatible.
+
+    This function checks the installed versions of PyTorch and Torchvision, and warns if they're incompatible according
+    to the provided compatibility table based on:
+    https://github.com/pytorch/vision#installation.
+
+    The compatibility table is a dictionary where the keys are PyTorch versions and the values are lists of compatible
+    Torchvision versions.
+    """
+
+    # Compatibility table
+    compatibility_table = {
+        "2.3": ["0.18"],
+        "2.2": ["0.17"],
+        "2.1": ["0.16"],
+        "2.0": ["0.15"],
+        "1.13": ["0.14"],
+        "1.12": ["0.13"],
+    }
+
+    # Extract only the major and minor versions
+    v_torch = ".".join(torch.__version__.split("+")[0].split(".")[:2])
+    if v_torch in compatibility_table:
+        compatible_versions = compatibility_table[v_torch]
+        v_torchvision = ".".join(TORCHVISION_VERSION.split("+")[0].split(".")[:2])
+        if all(v_torchvision != v for v in compatible_versions):
+            print(
+                f"WARNING ⚠️ torchvision=={v_torchvision} is incompatible with torch=={v_torch}.\n"
+                f"Run 'pip install torchvision=={compatible_versions[0]}' to fix torchvision or "
+                "'pip install -U torch torchvision' to update both.\n"
+                "For a full compatibility table see https://github.com/pytorch/vision#installation"
+            )
+
+
+def check_suffix(file="yolov8n.pt", suffix=".pt", msg=""):
+    """Check file(s) for acceptable suffix."""
+    if file and suffix:
+        if isinstance(suffix, str):
+            suffix = (suffix,)
+        for f in file if isinstance(file, (list, tuple)) else [file]:
+            s = Path(f).suffix.lower().strip()  # file suffix
+            if len(s):
+                assert s in suffix, f"{msg}{f} acceptable suffix is {suffix}, not {s}"
+
+
+def check_yolov5u_filename(file: str, verbose: bool = True):
+    """Replace legacy YOLOv5 filenames with updated YOLOv5u filenames."""
+    if "yolov3" in file or "yolov5" in file:
+        if "u.yaml" in file:
+            file = file.replace("u.yaml", ".yaml")  # i.e. yolov5nu.yaml -> yolov5n.yaml
+        elif ".pt" in file and "u" not in file:
+            original_file = file
+            file = re.sub(r"(.*yolov5([nsmlx]))\.pt", "\\1u.pt", file)  # i.e. yolov5n.pt -> yolov5nu.pt
+            file = re.sub(r"(.*yolov5([nsmlx])6)\.pt", "\\1u.pt", file)  # i.e. yolov5n6.pt -> yolov5n6u.pt
+            file = re.sub(r"(.*yolov3(|-tiny|-spp))\.pt", "\\1u.pt", file)  # i.e. yolov3-spp.pt -> yolov3-sppu.pt
+            if file != original_file and verbose:
+                LOGGER.info(
+                    f"PRO TIP 💡 Replace 'model={original_file}' with new 'model={file}'.\nYOLOv5 'u' models are "
+                    f"trained with https://github.com/ultralytics/ultralytics and feature improved performance vs "
+                    f"standard YOLOv5 models trained with https://github.com/ultralytics/yolov5.\n"
+                )
+    return file
+
+
+def check_model_file_from_stem(model="yolov8n"):
+    """Return a model filename from a valid model stem."""
+    if model and not Path(model).suffix and Path(model).stem in downloads.GITHUB_ASSETS_STEMS:
+        return Path(model).with_suffix(".pt")  # add suffix, i.e. yolov8n -> yolov8n.pt
+    else:
+        return model
+
+
+def check_file(file, suffix="", download=True, download_dir=".", hard=True):
+    """Search/download file (if necessary) and return path."""
+    check_suffix(file, suffix)  # optional
+    file = str(file).strip()  # convert to string and strip spaces
+    file = check_yolov5u_filename(file)  # yolov5n -> yolov5nu
+    if (
+        not file
+        or ("://" not in file and Path(file).exists())  # '://' check required in Windows Python<3.10
+        or file.lower().startswith("grpc://")
+    ):  # file exists or gRPC Triton images
+        return file
+    elif download and file.lower().startswith(("https://", "http://", "rtsp://", "rtmp://", "tcp://")):  # download
+        url = file  # warning: Pathlib turns :// -> :/
+        file = Path(download_dir) / url2file(file)  # '%2F' to '/', split https://url.com/file.txt?auth
+        if file.exists():
+            LOGGER.info(f"Found {clean_url(url)} locally at {file}")  # file already exists
+        else:
+            downloads.safe_download(url=url, file=file, unzip=False)
+        return str(file)
+    else:  # search
+        files = glob.glob(str(ROOT / "**" / file), recursive=True) or glob.glob(str(ROOT.parent / file))  # find file
+        if not files and hard:
+            raise FileNotFoundError(f"'{file}' does not exist")
+        elif len(files) > 1 and hard:
+            raise FileNotFoundError(f"Multiple files match '{file}', specify exact path: {files}")
+        return files[0] if len(files) else []  # return file
+
+
+def check_yaml(file, suffix=(".yaml", ".yml"), hard=True):
+    """Search/download YAML file (if necessary) and return path, checking suffix."""
+    return check_file(file, suffix, hard=hard)
+
+
+def check_is_path_safe(basedir, path):
+    """
+    Check if the resolved path is under the intended directory to prevent path traversal.
+
+    Args:
+        basedir (Path | str): The intended directory.
+        path (Path | str): The path to check.
+
+    Returns:
+        (bool): True if the path is safe, False otherwise.
+    """
+    base_dir_resolved = Path(basedir).resolve()
+    path_resolved = Path(path).resolve()
+
+    return path_resolved.exists() and path_resolved.parts[: len(base_dir_resolved.parts)] == base_dir_resolved.parts
+
+
+def check_imshow(warn=False):
+    """Check if environment supports image displays."""
+    try:
+        if LINUX:
+            assert not IS_COLAB and not IS_KAGGLE
+            assert "DISPLAY" in os.environ, "The DISPLAY environment variable isn't set."
+        cv2.imshow("test", np.zeros((8, 8, 3), dtype=np.uint8))  # show a small 8-pixel image
+        cv2.waitKey(1)
+        cv2.destroyAllWindows()
+        cv2.waitKey(1)
+        return True
+    except Exception as e:
+        if warn:
+            LOGGER.warning(f"WARNING ⚠️ Environment does not support cv2.imshow() or PIL Image.show()\n{e}")
+        return False
+
+
+def check_yolo(verbose=True, device=""):
+    """Return a human-readable YOLO software and hardware summary."""
+    import psutil
+
+    from ultralytics.utils.torch_utils import select_device
+
+    if IS_JUPYTER:
+        if check_requirements("wandb", install=False):
+            os.system("pip uninstall -y wandb")  # uninstall wandb: unwanted account creation prompt with infinite hang
+        if IS_COLAB:
+            shutil.rmtree("sample_data", ignore_errors=True)  # remove colab /sample_data directory
+
+    if verbose:
+        # System info
+        gib = 1 << 30  # bytes per GiB
+        ram = psutil.virtual_memory().total
+        total, used, free = shutil.disk_usage("/")
+        s = f"({os.cpu_count()} CPUs, {ram / gib:.1f} GB RAM, {(total - free) / gib:.1f}/{total / gib:.1f} GB disk)"
+        with contextlib.suppress(Exception):  # clear display if ipython is installed
+            from IPython import display
+
+            display.clear_output()
+    else:
+        s = ""
+
+    select_device(device=device, newline=False)
+    LOGGER.info(f"Setup complete ✅ {s}")
+
+
+def collect_system_info():
+    """Collect and print relevant system information including OS, Python, RAM, CPU, and CUDA."""
+
+    import psutil
+
+    from ultralytics.utils import ENVIRONMENT, IS_GIT_DIR
+    from ultralytics.utils.torch_utils import get_cpu_info
+
+    ram_info = psutil.virtual_memory().total / (1024**3)  # Convert bytes to GB
+    check_yolo()
+    LOGGER.info(
+        f"\n{'OS':<20}{platform.platform()}\n"
+        f"{'Environment':<20}{ENVIRONMENT}\n"
+        f"{'Python':<20}{PYTHON_VERSION}\n"
+        f"{'Install':<20}{'git' if IS_GIT_DIR else 'pip' if IS_PIP_PACKAGE else 'other'}\n"
+        f"{'RAM':<20}{ram_info:.2f} GB\n"
+        f"{'CPU':<20}{get_cpu_info()}\n"
+        f"{'CUDA':<20}{torch.version.cuda if torch and torch.cuda.is_available() else None}\n"
+    )
+
+    for r in parse_requirements(package="ultralytics"):
+        try:
+            current = metadata.version(r.name)
+            is_met = "✅ " if check_version(current, str(r.specifier), hard=True) else "❌ "
+        except metadata.PackageNotFoundError:
+            current = "(not installed)"
+            is_met = "❌ "
+        LOGGER.info(f"{r.name:<20}{is_met}{current}{r.specifier}")
+
+    if is_github_action_running():
+        LOGGER.info(
+            f"\nRUNNER_OS: {os.getenv('RUNNER_OS')}\n"
+            f"GITHUB_EVENT_NAME: {os.getenv('GITHUB_EVENT_NAME')}\n"
+            f"GITHUB_WORKFLOW: {os.getenv('GITHUB_WORKFLOW')}\n"
+            f"GITHUB_ACTOR: {os.getenv('GITHUB_ACTOR')}\n"
+            f"GITHUB_REPOSITORY: {os.getenv('GITHUB_REPOSITORY')}\n"
+            f"GITHUB_REPOSITORY_OWNER: {os.getenv('GITHUB_REPOSITORY_OWNER')}\n"
+        )
+
+
+def check_amp(model):
+    """
+    This function checks the PyTorch Automatic Mixed Precision (AMP) functionality of a YOLOv8 model. If the checks
+    fail, it means there are anomalies with AMP on the system that may cause NaN losses or zero-mAP results, so AMP will
+    be disabled during training.
+
+    Args:
+        model (nn.Module): A YOLOv8 model instance.
+
+    Example:
+        ```python
+        from ultralytics import YOLO
+        from ultralytics.utils.checks import check_amp
+
+        model = YOLO('yolov8n.pt').model.cuda()
+        check_amp(model)
+        ```
+
+    Returns:
+        (bool): Returns True if the AMP functionality works correctly with YOLOv8 model, else False.
+    """
+    from ultralytics.utils.torch_utils import autocast
+
+    device = next(model.parameters()).device  # get model device
+    if device.type in {"cpu", "mps"}:
+        return False  # AMP only used on CUDA devices
+
+    def amp_allclose(m, im):
+        """All close FP32 vs AMP results."""
+        a = m(im, device=device, verbose=False)[0].boxes.data  # FP32 inference
+        with autocast(enabled=True):
+            b = m(im, device=device, verbose=False)[0].boxes.data  # AMP inference
+        del m
+        return a.shape == b.shape and torch.allclose(a, b.float(), atol=0.5)  # close to 0.5 absolute tolerance
+
+    im = ASSETS / "bus.jpg"  # image to check
+    prefix = colorstr("AMP: ")
+    LOGGER.info(f"{prefix}running Automatic Mixed Precision (AMP) checks with YOLOv8n...")
+    warning_msg = "Setting 'amp=True'. If you experience zero-mAP or NaN losses you can disable AMP with amp=False."
+    try:
+        from ultralytics import YOLO
+
+        assert amp_allclose(YOLO("yolov8n.pt"), im)
+        LOGGER.info(f"{prefix}checks passed ✅")
+    except ConnectionError:
+        LOGGER.warning(f"{prefix}checks skipped ⚠️, offline and unable to download YOLOv8n. {warning_msg}")
+    except (AttributeError, ModuleNotFoundError):
+        LOGGER.warning(
+            f"{prefix}checks skipped ⚠️. "
+            f"Unable to load YOLOv8n due to possible Ultralytics package modifications. {warning_msg}"
+        )
+    except AssertionError:
+        LOGGER.warning(
+            f"{prefix}checks failed ❌. Anomalies were detected with AMP on your system that may lead to "
+            f"NaN losses or zero-mAP results, so AMP will be disabled during training."
+        )
+        return False
+    return True
+
+
+def git_describe(path=ROOT):  # path must be a directory
+    """Return human-readable git description, i.e. v5.0-5-g3e25f1e https://git-scm.com/docs/git-describe."""
+    with contextlib.suppress(Exception):
+        return subprocess.check_output(f"git -C {path} describe --tags --long --always", shell=True).decode()[:-1]
+    return ""
+
+
+def print_args(args: Optional[dict] = None, show_file=True, show_func=False):
+    """Print function arguments (optional args dict)."""
+
+    def strip_auth(v):
+        """Clean longer Ultralytics HUB URLs by stripping potential authentication information."""
+        return clean_url(v) if (isinstance(v, str) and v.startswith("http") and len(v) > 100) else v
+
+    x = inspect.currentframe().f_back  # previous frame
+    file, _, func, _, _ = inspect.getframeinfo(x)
+    if args is None:  # get args automatically
+        args, _, _, frm = inspect.getargvalues(x)
+        args = {k: v for k, v in frm.items() if k in args}
+    try:
+        file = Path(file).resolve().relative_to(ROOT).with_suffix("")
+    except ValueError:
+        file = Path(file).stem
+    s = (f"{file}: " if show_file else "") + (f"{func}: " if show_func else "")
+    LOGGER.info(colorstr(s) + ", ".join(f"{k}={strip_auth(v)}" for k, v in args.items()))
+
+
+def cuda_device_count() -> int:
+    """
+    Get the number of NVIDIA GPUs available in the environment.
+
+    Returns:
+        (int): The number of NVIDIA GPUs available.
+    """
+    try:
+        # Run the nvidia-smi command and capture its output
+        output = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=count", "--format=csv,noheader,nounits"], encoding="utf-8"
+        )
+
+        # Take the first line and strip any leading/trailing white space
+        first_line = output.strip().split("\n")[0]
+
+        return int(first_line)
+    except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
+        # If the command fails, nvidia-smi is not found, or output is not an integer, assume no GPUs are available
+        return 0
+
+
+def cuda_is_available() -> bool:
+    """
+    Check if CUDA is available in the environment.
+
+    Returns:
+        (bool): True if one or more NVIDIA GPUs are available, False otherwise.
+    """
+    return cuda_device_count() > 0
 
 
 # Define constants
-LOADERS = (LoadStreams, LoadPilAndNumpy, LoadImagesAndVideos, LoadScreenshots)
+IS_PYTHON_MINIMUM_3_10 = check_python("3.10", hard=False)
+IS_PYTHON_3_12 = PYTHON_VERSION.startswith("3.12")

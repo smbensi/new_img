@@ -15,7 +15,10 @@ import requests
 import torch
 from PIL import Image
 
-from img_xtend.utils import LOGGER
+from img_xtend.utils import LOGGER, ops
+
+from .utils import IMG_FORMATS, VID_FORMATS, FORMATS_HELP_MSG
+
 
 @dataclass
 class SourceTypes:
@@ -70,7 +73,7 @@ class LoadStreams:
         self.caps = [None] * n # video capture objects
         self.imgs = [[] for _ in range(n)] # images
         self.shape = [[] for _ in range(n)] # image shapes
-        self.sources = [ops.clean_str(x) for x in sources] #TODO add ops clean source names for later 
+        self.sources = [ops.clean_str(x) for x in sources] 
         
         for i, s in enumerate(sources): # index, source
             # Start thread to read frames from video stream
@@ -96,7 +99,7 @@ class LoadStreams:
             self.imgs[i].append(i)
             self.shape[i] = im.shape
             self.threads[i] = Thread(target=self.update, args=([i, self.caps[i], s]), daemon=True)
-            LOGGER.info(f"{st}Success ✅ ({self.frame[i]} frames of shape {w}x{h} at {self.fps[i]:.2f} FPS)")
+            LOGGER.info(f"{st}Success ✅ ({self.frames[i]} frames of shape {w}x{h} at {self.fps[i]:.2f} FPS)")
             self.threads[i].start()
         LOGGER.info("")
         
@@ -217,9 +220,9 @@ class LoadImagesAndVideos:
         images, videos = [], []
         for f in files:
             suffix = f.split('.')[-1].lower() # Get file extension without the dot and lowercase
-            if suffix in IMG_FORMATS: # TODO add IMG_FORMATS
+            if suffix in IMG_FORMATS: 
                 images.append(f)
-            elif suffix in VID_FORMATS: # TODO add VID_FORMATS
+            elif suffix in VID_FORMATS: 
                 videos.append(f)
         ni, nv = len(images), len(videos)
         
@@ -235,7 +238,7 @@ class LoadImagesAndVideos:
         else:
             self.cap = None
         if self.nf == 0:
-            raise FileNotFoundError(f"No images or videos found in {p}. {FORMATS_HELP_MSG}") # TODO check FORMATS_HELP_MSG
+            raise FileNotFoundError(f"No images or videos found in {p}. {FORMATS_HELP_MSG}") 
         
     def __iter__(self):
         """Returns an iterator object for VideoStream or ImageFolder."""

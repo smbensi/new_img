@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 import torch
 
-from img_xtend.utils import LOGGER
+from img_xtend.utils import LOGGER, ops
 from img_xtend.data.build import load_inference_source
 
 
@@ -158,7 +158,7 @@ class BasePredictor:
                 ops.Profile(device=self.device),
                 ops.Profile(device=self.device),
                 ops.Profile(device=self.device),
-            ) #TODO add profile
+            ) 
             self.run_callbacks("on_predict_start")
             for self.batch in self.dataset:
                 self.run_callbacks("on_predict_batch_start")
@@ -215,7 +215,7 @@ class BasePredictor:
                 nl = len(list(self.save_dir.glob("labels/*.txt")))  # number of labels
                 s = f"\n{nl} label{'s' * (nl > 1)} saved to {self.save_dir / 'labels'}" if self.args.save_txt else ""
                 LOGGER.info(f"Results saved to {colorstr('bold', self.save_dir)}{s}")
-            self.run_callbacks("on_predict_end")
+            self.run_callbacks("on_predict_end") # TODO colorstr
 
     
     def setup_model(self, model, verbose=True):
