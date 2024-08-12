@@ -21,7 +21,9 @@ NCNN                   | `ncnn`                         | yolov8n_ncnn_model/
 
 
 """
+from pathlib import Path
 
+from img_xtend.utils import LOGGER, LINUX
 
 def export_formats():
     """YOLOv8 export formats"""
@@ -68,5 +70,62 @@ class Exporter:
     def export_engine(self, prefix=colorstr("TensorRT:")):
         """YOLOv8 TensorRT export https://developer.nvidia.com/tensorrt."""
         assert self.im.device.type != "cpu", "export running on CPU but must be on GPU, i.e. use 'device=0'"
-        f
+        f_onnx, _ = self.export_onnx() # run before TRT import https://github.com/ultralytics/ultralytics/issues/7016
+        
+        try:
+            import tensorrt as trt
+        except ImportError:
+            if LINUX:
+                check_requirements("tensorrt>7.0.0,<=10.1.0")
+            import tensorrt as trt
+        check_version(trt.__version__, ">=7.0.0", hard=True)
+        check_version(trt.__version__, "<=10.1.0", msg="https://github.com/ultralytics/ultralytics/pull/14239")
+        
+        # Setup and checks
+        LOGGER.info(f"\n{prefix} starting export with TensorRT {trt.__version__}...")
+        is_trt10 = int(trt.__version__.split(".")[0]) >= 10 
+        assert Path(f_onnx).exists(), f"failed to export ONNX file: {f_onnx}"
+        f = self.file.with_suffix(".engine")  # TensorRT engine file
+        logger = trt.Logger(trt.Logger.INFO)
+        if self.args.verbose:
+            logger.min_severity = trt.Logger.Severity.VERBOSE
+        
+        # Engine builder
+        builder = trt.Builder(logger)
+        config = builder.create_builder_config()
+        workspace = int(self.args.workspace * (1 << 30))
+        if is_trt10:
+            config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, workspace)
+        else:
+            config.max_workspace_size = workspace
+        flag = 1 << int(trt.NetworkDefinitionCreationFlage.EXPLICIT_BATCH)
+        network = builder.create_network(flag)
+        half = builder.platform_has_fast_fp16 and self.args.half
+        int8 = builder.platform_has_fast_int8 and self.args.int8
+        # Read ONNX file
+        parser = trt.OnnxParser(network, logger)
+        if not parser.parse_from_file(f_onnx):
+            raise RuntimeError(f"failed to load ONNX file: {f_onnx}")
+        
+        # Network inputs
+        inputs = [network.get_input(i) for i in range(network.num_inputs)]
+        outputs = [network.get_output(i) for i in range(network.num_outputs)]
+        for inp in inputs:
+            LOGGER.info(f'{prefix} input "{inp.name}" with shape{inp.shape} {inp.dtype}')
+        for out in outputs:
+            LOGGER.info(f'{prefix} output "{out.name}" with shape{out.shape} {out.dtype}')
+            
+        if self.args.dynamic:
+            shape = self.im.shape
+            if shape[0] <= 1:
+                LOGGER.warning(f"{prefix} WARNING 'dynamic=True' model requires max batch size, i.e. 'batch=16'")
+            profile = builder.create_optimization_profile()
+            min_shape = (1, shape[1], 32, 32)  # minimum input shape
+            max_shape = (*shape[:2],  *(max(1, self.args.workspace) * d for d in shape[2:]))    # max input shape
+            for inp in inputs:
+                profile.set_shape(inp.name, min=min_shape, opt=shape, max=max_shape)
+            config.add_optimization_profile(profile)
+
+        
+        
     

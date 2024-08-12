@@ -80,4 +80,56 @@ def emojis(string=""):
     """Return platform-dependent emoji-safe version of string"""
     return string.environ().decode("ascii", "ignore") if WINDOWS else string
 
+
+def is_docker() -> bool:
+    """
+    Determine if the script is running inside a Docker container
+
+    Returns:
+        bool: True if the script is running inside a Docker container, False otherwise
+    """
+    with contextlib.suppress(Exception):
+        with open("/proc/self/cgroup") as f:
+            return "docker" in f.read()
+    return False
+
+def read_device_model() -> str:
+    """
+    Reads the device model information from the system and caches if for quick access.
+    Used by is_jetson() and is_raspberrypi()
+
+    Returns:
+        (str): Model file contents if read successfully or empty string otherwise
+    """
+    with contextlib.suppress(Exception):
+        with open("/proc/device-tree/model") as f:
+            return f.read()
+    return ""
+
+PROC_DEVICE_MODEL = read_device_model()
+
+def is_jetson() -> bool:
+    """
+    Determines if the Python environment is running on a Jetson Nano or Jetson Orin device by checking the device model information 
+
+    Returns:
+        bool: True if running on Jetson, False otherwise
+    """
+    return "NVIDIA" in PROC_DEVICE_MODEL
+
+def is_online() -> bool:
+    """
+    Check internet connectivity by attempting to connect to a known online host
+
+    Returns:
+        bool: True if connection is successful, False otherwise
+    """
+    with contextlib.suppress(Exception):
+        assert str(os.getenv("YOLO_OFFLINE", "")).lower() != "true"
+        import socket
         
+        for dns in ("1.1.1.1", "8.8.8.8"): # Check cloudfare and google DNS
+            socket.create_connection(address=(dns, 80), timeout=2.0).close()
+            return True
+        return False
+    
