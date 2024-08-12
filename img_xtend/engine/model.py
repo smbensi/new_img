@@ -121,4 +121,85 @@ class Model(nn.Module):
             List[ultralytics.engine.results.Results]: A list of prediction resultsm each encapsulated in a Result object
         """
         return self.predict(source, stream, **kwargs)
+    
+    def _check_is_pytorch_model(self) -> None:
+        """
+        Check if the model is PyTorch model and raises a TypeError if it's not.
+        
+        This method verifies that the model is either a PyTorch module or a .pt file.
+        It's used to ensure that certain operations that require a PyTorch model are only performed on compatible model types.
+
+        Raises:
+            TypeError: f the model is not a PyTorch module or a .pt file. The error message provides detailed
+                information about supported model formats and operations.
+
+        """
+        pt_str = isinstance(self.model, (str,Path)) and Path(self.model).suffix == ".pt"
+        pt_module = isinstance(self.model, nn.Module)
+        if not (pt_module or pt_str):
+            raise TypeError(
+                f"model='{self.model}' should be a *.pt PyTorch model to run this method, but is a different format. "
+                f"PyTorch models can train, val, predict and export, i.e. 'model.train(data=...)', but exported "
+                f"formats like ONNX, TensorRT etc. only support 'predict' and 'val' modes, "
+                f"i.e. 'yolo predict model=yolov8n.onnx'.\nTo run CUDA or MPS inference please pass the device "
+                f"argument directly in your inference command, i.e. 'model.predict(source=..., device=0)'"
+            )
+    
+    @staticmethod
+    def is_triton_model(model:str) -> bool:
+        """
+        Check if the given model string is a Triton Server URL
+
+        Args:
+            model (str): The model string to be checked
+
+        Returns:
+            bool: True if the model string is a valid Triton Server URL False otherwise
+        """
+        from urllib.parse import urlsplit
+        
+        url = urlsplit(model)
+        return url.netloc and url.path and url.scheme in {"http", "grpc"}
+    
+    def export(
+        self,
+        **kwargs,
+    ) -> str:
+        """
+        Export the model to a different format suitable for alignment
+        
+        This method facilitates the export of the model to various formats (e.g., ONNX, TorchScript) for deployment purposes.
+        It uses the 'Exporter' class for the export process, combining model-specific overrides, method defaults, and any additional arguments provided.
+        
+        Args:
+            **kwargs (Dict): Arbitrary keyword arguments to customize the export process. These are combined with
+                the model's overrides and method defaults. Common arguments include:
+                format (str): Export format (e.g., 'onnx', 'engine', 'coreml').
+                half (bool): Export model in half-precision.
+                int8 (bool): Export model in int8 precision.
+                device (str): Device to run the export on.
+                workspace (int): Maximum memory workspace size for TensorRT engines.
+                nms (bool): Add Non-Maximum Suppression (NMS) module to model.
+                simplify (bool): Simplify ONNX model.
+        
+        Returns:
+            (str): The path to the exported model file.
+
+        Raises:
+            AssertionError: If the model is not a PyTorch model.
+            ValueError: If an unsupported export format is specified.
+            RuntimeError: If the export process fails due to errors.
+        """
+        self._check_is_pytorch_model()
+        from .exporter import Exporter
+        
+        custom = {
+            "imgsz": self.model.args["imgsz"],
+            "batch": 1,
+            "data": None,
+            "device": None,  # reset to avoid multi-GPU errors
+            "verbose": False
+        }   # method defaults
+        args = {**self.overrides, **custom, **kwargs, "mode":"export"}  # highest priority args on the right
+        return Exporter(overrides=args, _callbacks=self.callbacks)(model=self.model)
             
