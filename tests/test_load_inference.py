@@ -7,6 +7,8 @@ a = load_inference_source(source)
 print(a.source_type)
 print(len(a))
 print(a)
-# for elem in a:
-#     print(type(elem))
-#     print(elem)
+for i,elem in enumerate(a):
+    print(type(elem))
+    print(elem)
+    if i == 10:
+        break

@@ -119,6 +119,7 @@ class LoadStreams:
                         cap.open(stream)  # re-open stream if signal was lost
                     if self.buffer:
                         self.imgs[i].append(im)
+                        LOGGER.debug("Success")
                     else:
                         self.imgs[i] = [im]
             
@@ -165,7 +166,7 @@ class LoadStreams:
             
             # Get the last frame and clear the rest from the imgs buffer
             else:
-                images.append(x.pop[-1] if x else np.zeros(self.shape[i], dtype=np.uint8))
+                images.append(x.pop(-1) if x else np.zeros(self.shape[i], dtype=np.uint8))
                 x.clear()
         
         return self.sources, images, [""] * self.bs

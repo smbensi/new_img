@@ -22,6 +22,11 @@ NCNN                   | `ncnn`                         | yolov8n_ncnn_model/
 
 """
 from pathlib import Path
+import gc
+import json
+
+import torch
+
 
 from img_xtend.utils import LOGGER, LINUX
 
@@ -125,6 +130,80 @@ class Exporter:
             for inp in inputs:
                 profile.set_shape(inp.name, min=min_shape, opt=shape, max=max_shape)
             config.add_optimization_profile(profile)
+        
+        LOGGER.info(f"{prefix} building {'INT8' if int8 else 'FP' + ('16' if half else '32')} engine as {f}")
+        if int8:
+            config.set_flag(trt.BuilderFlag.INT8)
+            config.set_calibration_profile(profile)
+            config.profiling_verbosity = trt.ProfilingVerbosity.DETAILED
+            
+            class EngineCalibrator(trt.IInt8Calibrator):
+                def __init__(
+                    self,
+                    dataset, # ultralytics.data.build.InfiniteDataLoader
+                    batch: int,
+                    cache: str = "",
+                ) -> None:
+                    trt.IInt8Calibrator.__init__(self)
+                    self.dataset = dataset
+                    self.data_iter = iter(dataset)
+                    self.algo = trt.Calibration.ENTROPY_CALIBRATION_2
+                    self.batch = batch
+                    self.cache = Path(cache)
+                    
+                def get_algorithm(self) -> trt.CalibrationAlgoType: 
+                    """Get the calibration algorithm to use"""
+                    return self.algo
+                
+                def get_batch_size(self) -> int:
+                    """Get the batch size to use for calibration"""
+                    return self.batch or 1
+                
+                def get_batch(self, names) -> list:
+                    """Get the next batch to use for calibration, as a list of device memory pointers"""
+                    try:
+                        im0s = next(self.data_iter)["img"] / 255.0
+                        im0s = im0s.to("cuda") if im0s.device_type == "cpu" else im0s
+                        return [int(im0s.data_ptr())]
+                    except StopIteration:
+                        # Return [] or None, signal to TensorRT there is no calibration data remaining
+                        return None
+                    
+                def read_calibration_cache(self) -> bytes:
+                    """Use existing cache instead of calibrating again, otherwise, implicitly return None"""
+                    if self.cache.exists() and self.cache.suffix == '.cache':
+                        return self.cache.read_bytes()
+                    
+                def write_calibration_cache(self, cache) -> None:
+                    """Write calibration cache to disk"""
+                    _ = self.cache.write_bytes(cache)
+            
+            # Load dataset w/ builder (for batching) and calibrate
+            config.int8_calibrator = EngineCalibrator(
+                dataset=self.get_int8_calibration_dataloader(prefix),
+                batch = 2 * self.args.batch,
+                cache = str(self.file.with_suffix(".cache")),
+            )
+        
+        elif half:
+            config.set_flag(trt.BuilderFlag.FP16)
+            
+        # Free CUDA memory
+        del self.model
+        gc.collect()
+        torch.cuda.empty_cache()
+        
+        # Write file
+        build = builder.build_serialized_network if is_trt10 else builder.build_engine
+        with build(network, config) as engine, open(f, "wb") as t:
+            # Metadata
+            meta = json.dumps(self.metadata)
+            t.write(len(meta).to_bytes(4, byteorder='little', signed=True))
+            t.write(meta.encode())
+            # Model
+            t.write(engine if is_trt10 else engine.serialize())
+        
+        return f, None
 
         
         
