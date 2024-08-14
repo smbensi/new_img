@@ -117,6 +117,8 @@ def is_jetson() -> bool:
     """
     return "NVIDIA" in PROC_DEVICE_MODEL
 
+IS_JETSON = is_jetson()
+
 def is_online() -> bool:
     """
     Check internet connectivity by attempting to connect to a known online host

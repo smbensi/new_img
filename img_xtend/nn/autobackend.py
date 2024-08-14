@@ -14,6 +14,7 @@ import torch
 import torch.nn as nn
 from PIL import Image
 
+from img_xtend.utils import LOGGER, IS_JETSON
 
 class AutoBackend(nn.Module):
     """
@@ -137,3 +138,17 @@ class AutoBackend(nn.Module):
             if extra_files["config.txt"]:  # load metadata dict
                 metadata = json.loads(extra_files["config.txt"], object_hook=lambda x: dict(x.items()))
         
+        # ONNX runtime
+        elif onnx:
+            LOGGER.info(f"Loading {w} for ONNX Runtime inference...")
+            check_requirements(("onnx", "onnxruntime-gpu" if cuda else "onnxruntime")) # TODO add check_requirements
+            if IS_JETSON:
+                # Fix 'numpy.linalg._umath_linalg' has no attribute '_ilp64' for TF SavedModel on RPi and Jetson
+                check_requirements("numpy==1.23.5")
+            import onnxruntime
+            
+            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if cuda else ["CPUExecutionProvider"]
+            session = onnxruntime.InferenceSession(w, providers=providers)
+            output_names = [x.name for x in session.get_outputs()]
+            metadata = session.get_modelmeta().custom_metadata_map
+            

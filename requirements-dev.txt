@@ -4,6 +4,9 @@ numpy
 pillow
 matplotlib
 
+onnxruntime 
+onnxruntime-gpu
+
 
 # for loading youtube video
 pytubefix
