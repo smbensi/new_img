@@ -7,7 +7,7 @@ class FollowTracker:
     
     
     Methods:
-        __init__ check that the re-id model is loaded and init the Tracker object
+        __init__(): check that the re-id model is loaded and init the Tracker object
         start_follow():
         update(): based on the update of the tracks and the id followed update
         save_img(): for debugging save img to check teh results
@@ -26,6 +26,17 @@ class FollowTracker:
         
         # parameters for integration
         self.track_id_followed = None
+        self.following = False
+        
+        # parameters for track identification
+        self.height = None
+        self.width = None
+        self.hits = 0
+        self.miss = 0
+        self.last_time_update = None
+        self.previous_bbox = None
+        self.same_bbox = None
+        
         
         # parameters for the Tracker object
         self.max_dist = max_dist
@@ -49,3 +60,12 @@ class FollowTracker:
             mc_lambda=self.mc_lambda,
             ema_alpha=self.ema_alpha
         )
+        
+    def set_followed_track(self, bboxes):
+        pass
+    
+    def update(self, bboxes):
+        if not self.following:
+            self.set_followed_track(bboxes)
+        else:
+            pass
