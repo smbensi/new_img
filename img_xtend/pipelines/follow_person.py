@@ -1,3 +1,14 @@
+import abc
+
+class BaseFollow(abc.ABC):
+    def __init__(self):
+        pass
+    
+    @abc.abstractmethod
+    def update(self):
+        raise NotImplementedError("Subclasses must implement update()")
+
+
 class FollowTracker:
     """
     This class is responsible to follow one person through the frames and also responsible to reidentify him if it disapear and reappear
