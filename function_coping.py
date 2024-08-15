@@ -222,7 +222,7 @@ class AutoBackend(nn.Module):
         elif engine:
             LOGGER.info(f"Loading {w} for TensorRT inference...")
             try:
-                import tensorrt as trt  # noqa https://developer.nvidia.com/nvidia-tensorrt-download
+                import tensorrt as trt  
             except ImportError:
                 if LINUX:
                     check_requirements("tensorrt>7.0.0,<=10.1.0")

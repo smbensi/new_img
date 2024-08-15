@@ -12,7 +12,7 @@ import torch
 from img_xtend.utils import LOGGER, ops
 from img_xtend.utils.checks import check_imgsz, check_imshow
 from img_xtend.data.build import load_inference_source
-
+from img_xtend.nn.autobackend import AutoBackend
 
 STREAM_WARNING = """
 WARNING ⚠️ inference results will accumulate in RAM unless `stream=True` is passed, causing potential out-of-memory
