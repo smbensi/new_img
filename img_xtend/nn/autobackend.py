@@ -15,6 +15,8 @@ import torch.nn as nn
 from PIL import Image
 
 from img_xtend.utils import LOGGER, IS_JETSON, LINUX
+from img_xtend.utils.downloads import is_url
+
 
 class AutoBackend(nn.Module):
     """

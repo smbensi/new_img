@@ -28,7 +28,15 @@ import json
 import torch
 
 
-from img_xtend.utils import LOGGER, LINUX
+from img_xtend.utils import (
+    LOGGER,
+    LINUX,
+    DEFAULT_CFG,
+    get_default_args,
+    colorstr
+)
+from img_xtend.utils.ops import Profile
+from img_xtend.utils.files import file_size
 
 def export_formats():
     """YOLOv8 export formats"""
@@ -51,7 +59,24 @@ def export_formats():
     ]
     return pandas.DataFrame(x, columns=["Format", "Argument", "Suffix", "CPU", "GPU"])
 
-
+def try_export(inner_func):
+    """YOLOv8 export decorator, i.e, @try_export"""
+    inner_args = get_default_args(inner_func)
+    
+    def outer_func(*args, **kwargs):
+        """Export a model"""
+        prefix = inner_args["prefix"]
+        try:
+            with Profile() as dt:
+                f, model = inner_func(*args, **kwargs)
+            LOGGER.info(f"{prefix} export success {dt.t:.1f}s, saved as '{f}' ({file_size(f):.1f} MB)")
+            return f, model
+        except Exception as e:
+            LOGGER.info(f'{prefix} export failure ❌ {dt.t:.1f}s: {e}')
+            raise e
+    
+    return outer_func
+                
 class Exporter:
     """
     A class for exporting a model
