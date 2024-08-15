@@ -16,7 +16,7 @@ from PIL import Image
 
 from img_xtend.utils import LOGGER, IS_JETSON, LINUX
 from img_xtend.utils.downloads import is_url
-
+from .tasks import attempt_load_weights
 
 class AutoBackend(nn.Module):
     """

@@ -37,6 +37,7 @@ ROOT = FILE.parents[1]
 DEFAULT_CFG_PATH = ROOT / "cfg/default.yaml"
 
 
+
 def set_logging(name="LOGGING_NAME", verbose=True):
     """Sets up logging for the given name with UTF-8 encoding support, ensuring compatibility across different platforms"""
     level = logging.INFO if verbose and RANK in {-1, 0} else logging.ERROR # rank in world for Multi-GPU trainings
@@ -138,6 +139,8 @@ def is_online() -> bool:
             socket.create_connection(address=(dns, 80), timeout=2.0).close()
             return True
         return False
+
+ONLINE = is_online()
 
 
 class IterableSimpleNamespace(SimpleNamespace):
@@ -267,3 +270,36 @@ def colorstr(*input):
         "underline": "\033[4m",
     }
     return "".join(colors[x] for x in args) + f"{string}" + colors["end"]
+
+
+class TryExcept(contextlib.ContextDecorator):
+    """
+    Ultralytics TryExcept class. Use as @TryExcept() decorator or 'with TryExcept():' context manager.
+
+    Examples:
+        As a decorator:
+        >>> @TryExcept(msg="Error occurred in func", verbose=True)
+        >>> def func():
+        >>>    # Function logic here
+        >>>     pass
+
+        As a context manager:
+        >>> with TryExcept(msg="Error occurred in block", verbose=True):
+        >>>     # Code block here
+        >>>     pass
+    """
+
+    def __init__(self, msg="", verbose=True):
+        """Initialize TryExcept class with optional message and verbosity settings."""
+        self.msg = msg
+        self.verbose = verbose
+
+    def __enter__(self):
+        """Executes when entering TryExcept context, initializes instance."""
+        pass
+
+    def __exit__(self, exc_type, value, traceback):
+        """Defines behavior when exiting a 'with' block, prints error message if necessary."""
+        if self.verbose and value:
+            print(emojis(f"{self.msg}{': ' if self.msg else ''}{value}"))
+        return True
