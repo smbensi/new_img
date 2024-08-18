@@ -14,9 +14,41 @@ import torch
 import torch.nn as nn
 from PIL import Image
 
-from img_xtend.utils import LOGGER, IS_JETSON, LINUX
+from img_xtend.utils import LOGGER, IS_JETSON, LINUX, ROOT, yaml_load
 from img_xtend.utils.downloads import is_url
 from .tasks import attempt_load_weights
+
+def check_class_names(names):
+    """
+    Check class names
+    
+    Map imagenet class codes to human readable names if required. Convert lists to dicts
+    """
+    if isinstance(names, list):    #  names is a list
+        names = dict(enumerate(names))     # convert to dict
+    if isinstance(names, dict):
+        # Convert 1) string keys to int, i.e. '0' to 0, and non-string values to strings, i.e. True to 'True'
+        names = {int(k): str(v) for k,v in names.items()}
+        n = len(names)
+        if max(names.keys())>= n:
+            raise KeyError(
+                f"{n}-class dataset requires class indices 0-{n - 1}, but you have invalid class indices "
+                f"{min(names.keys())}-{max(names.keys())} defined in your dataset YAML."
+            )
+            
+        if isinstance(names[0], str) and names[0].startswith("n0"):      # imagenet class codes, i.e. 'n01440764'
+            names_map = yaml_load(ROOT / "cfg/datasets/ImageNet.yaml")["map"] # human-readable names
+            names = {k: names_map[v] for k,v in names.items()}
+    return names
+
+def default_class_names(data=None):
+    """Applies default class names to an input YAML file or returns numerical class names."""
+    if data:
+        with contextlib.suppress(Exception):
+            return yaml_load(check_yaml(data)["names"])
+    return {i: f"class{i}" for i in range(999)} # return default if above errors
+    
+
 
 class AutoBackend(nn.Module):
     """
@@ -230,11 +262,114 @@ class AutoBackend(nn.Module):
                 bindings[name] = Binding(name, dtype, shape, im, int(im.data_ptr()))
             binding_addrs = OrderedDict((n, d.ptr) for n, d in bindings.items())
             batch_size = bindings["images"].shape[0] # if dynamic, this is instead max batch size
+        
+        # Any other format (unsupported)
+        else:
+            from img_xtend.engine.exporter import export_formats
+            
+            raise TypeError(
+                f"model='{w} is not a supported model format. "
+                f"See https://docs.ultralytics.com/modes/predict for help.\n\n{export_formats()}"
+            )
+            
+        # Load external metadata YAML
+        if isinstance(metadata, (str, Path)) and Path(metadata).exists():
+            metadata = yaml_load(metadata)
+        if metadata and isinstance(metadata, dict):
+            for k, v in metadata.items():
+                if k in {"stride", "batch"}:
+                    metadata[k] = int(v)
+                elif k in {"imgsz", "names", "kpt_shape"} and isinstance(v, str):
+                    metadata[k] = eval(v)
+            stride = metadata["stride"]
+            task = metadata["task"]
+            batch = metadata["batch"]
+            imgsz = metadata["imgsz"]
+            names = metadata["names"]
+            kpt_shape = metadata.get("kpt_shape")
+        elif not (pt or triton or nn_module):
+            LOGGER.warning(f"WARNING Metadata not found for model={weights}")
+        
+        # Check names
+        if "names" not in locals(): # names missing
+            names = default_class_names(data)
+        names = check_class_names(names)
+        
+        # Disable gradients
+        if pt:
+            for p in model.parameters():
+                p.requires_grad = False
+        
+        self.__dict__.update(locals())   # assign all variables to self
             
             
     
     def forward(self, im, augment=False, visualize=False, embed=None):
-        pass
+        """
+        Runs inference on the YOLOv8 Multibackend model
+        
+        Args:
+            im (torch.Tensor): The image tensor to perform inference on
+            augment (bool): whether to perform data augmentation during inference, defaults to False
+            visualize (bool): Whether to visualize the output predictions, default to False
+            embed (list, optional): A list of feature vectors/ embeddings to return
+            
+        Returns:
+            (tuple): Tuple containing the raw output tensor, and processed output for visualization (if visualize=True)
+        """
+        b, ch, h, w = im.shape # batch, channel, height, width
+        if self.fp16 and im.dtype != torch.float16:
+            im = im.half()  # to FP16
+        if self.nhwc:
+            im = im.permute(0,2,3,1)  # torch BCHW ti numpy BHWC shape
+            
+        # PyTorch
+        if self.pt or self.nn_module:
+            y = self.model(im, augment=augment, visualize=visualize, embed=embed)
+        
+        # TorchScript
+        elif self.jit:
+            y = self.model(im)
+            
+        # ONNX OpenCV DNN
+        elif self.dnn:
+            im = im.cpu().numpy()  # torch to numpy
+            self.net.setInput(im)
+            y = self.net.forward()
+            
+        # ONNX Runtime
+        elif self.onnx:
+            im = im.cpu().numpy()
+            y = self.session.run(self.output_names, {self.session.get_inputs()[0].name: im})
+            
+            
+        # TensorRT
+        elif self.engine:
+            if self.dynamic or im.shape != self.bindings["images"].shape:
+                if self.is_trt10:
+                    self.context.set_input_shape("images", im.shape)
+                    self.bindings["images"] = self.bindings["images"]._replace(shape=im.shape)
+                    for name in self.output_names:
+                        self.bindings[name].data.resize_(tuple(self.context.get_tensor_shape(name)))
+                else:
+                    i = self.model.get_binding_index("images")
+                    self.context.set_binding_shape(i, im.shape)
+                    self.bindings["images"] = self.bindings["images"]._replace(shape=im.shape)
+                    for name in self.output_names:
+                        i = self.model.get_binding_index(name)
+                        self.bindings[name].data.resize_(tuple(self.context.get_binding_shape(i)))
+            
+            s = self.bindings["images"].shape
+            assert im.shape == s, f"input size {im.shape} {'>' if self.dynamic else 'not equal to'} max model size {s}"
+            self.binding_addrs["images"] = int(im.data_ptr())
+            self.context.execute_v2(list(self.binding_addrs.values))
+            y = [self.bindings[x].data for x in sorted(self.output_names)]
+        
+        
+        # Triton Server
+        elif self.triton:
+            im = im.cpu().numpy()
+            y = self.model(im)
     
     def from_numpy(self, x):
         """
