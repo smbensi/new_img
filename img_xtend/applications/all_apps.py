@@ -13,8 +13,12 @@ from img_xtend.data.build import load_inference_source
 source = "0"
 dataset = load_inference_source(source)
 
+RUN_TRACKING=False
+RUN_FACE_RECOGNITION=False
+RUN_DETECTION=False
 
 for element in dataset:
+    print(element,"\n")
     if RUN_TRACKING:
         pass
     if RUN_FACE_RECOGNITION:
