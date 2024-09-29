@@ -10,3 +10,7 @@ class FaceRecognition:
         
         self.recognized_faces = []
         self.unrecognized_faces = []
+        
+    
+    def update(self, img):
+        pass

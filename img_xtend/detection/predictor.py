@@ -16,17 +16,18 @@ class YoloV8:
     
     def __init__(self, pose:bool=False):
         start = time.time()
+        model_folder = "/code/models" if is_docker() else f'{os.getcwd()}/img_xtend/models/ultralytics'
         if pose:
-            model_path = "/code/models/yolov8n-pose.pt"
-        
+            model_name = "yolov8n-pose.pt"
+            model_path = f'{model_folder}/{model_name}'
+
         else:
             if USE_TRITON:
                 LOGGER.debug("****DETECTION MODEL FROM TRITON****")
                 model_path = f'http://localhost:8000/ultralytics'
             else:
                 LOGGER.debug("****DETECTION MODEL IS LOCAL (NOT TRITON)****")
-                model_name = os.getenv("MODEL_NAME","yolov8mFP16.engine")
-                model_folder = "/code/models" if is_docker() else f'{os.getcwd()}/img_xtend/models/ultralytics'
+                model_name = os.getenv("MODEL_NAME","yolov8n.pt") #FP16.engine")
                 model_path = f'{model_folder}/{model_name}'
                 
         self.model = YOLO(model_path,task='detect')
@@ -36,8 +37,9 @@ class YoloV8:
     
     def warmup(self):
         """Run a fake example to make the model ready to accept new input"""
-        img = cv2.imread("/code/object_detection_xtend/pipelines/detection/phone.jpg") # FIXME change with a photo with a person
-        self.predict(img)
+        img = cv2.imread("img_xtend/detection/man.jpg") # FIXME change with a photo with a person
+        bboxes = self.predict(img)
+        LOGGER.debug(bboxes)
     
     def predict(self,img:np.ndarray,conf:float=0.5,class_filter:list=None,show:bool=False,stream:bool=False,verbose:bool=False, track:bool=False):
         if track:

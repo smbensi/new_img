@@ -40,7 +40,7 @@ DEFAULT_CFG_PATH = ROOT / "cfg/default.yaml"
 
 def set_logging(name="LOGGING_NAME", verbose=True):
     """Sets up logging for the given name with UTF-8 encoding support, ensuring compatibility across different platforms"""
-    level = logging.INFO if verbose and RANK in {-1, 0} else logging.ERROR # rank in world for Multi-GPU trainings
+    level = logging.DEBUG if verbose and RANK in {-1, 0} else logging.ERROR # rank in world for Multi-GPU trainings
     
     # configure the console (stdout) encoding to UTF-8, with check for compatibility
     formatter = logging.Formatter("%(message)s")   # Default formatter
