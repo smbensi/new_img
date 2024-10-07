@@ -3,7 +3,9 @@ from img_xtend.data.build import load_inference_source
 
 
 model = AutoBackend(
-    weights="models/object_detection/yolov8m.pt",
+    # weights="models/object_detection/yolov8m.pt",
+    # weights="img_xtend/models/ultralytics/yolov8m.pt",
+    weights="img_xtend/models/recognition/resnet.onnx",
 )
 model.warmup()
 

@@ -37,7 +37,7 @@ class YoloV8:
     
     def warmup(self):
         """Run a fake example to make the model ready to accept new input"""
-        img = cv2.imread("img_xtend/detection/man.jpg") # FIXME change with a photo with a person
+        img = cv2.imread("img_xtend/detection/man.jpg") 
         bboxes = self.predict(img)
         LOGGER.debug(bboxes)
     
