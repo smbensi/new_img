@@ -3,7 +3,7 @@ from urllib.parse import urlsplit
 import numpy as np
 import cv2
 import torch
-
+import tritonclient
 from img_xtend.utils.triton import TritonRemoteModel 
 
 USE_TRITON = True   #TODO add  to the config
@@ -26,6 +26,9 @@ class FaceRecognition:
             try:
                 self.model = TritonRemoteModel(self.path)
             except ConnectionRefusedError as e:
+                print(f"ERROR: {e} \nCheck that the Triton server is correctly loaded")
+                exit()
+            except tritonclient.utils.InferenceServerException as e:
                 print(f"ERROR: {e} \nCheck that the model is correctly loaded in the Triton Server")
                 exit()
         else:
@@ -61,14 +64,14 @@ class FaceRecognition:
         import pycuda.autoinit
         
         TRT_LOGGER = trt.Logger()
-        engine_file = cfg["local_trt_resnet_model"]
+        engine_file = cfg["local_trt_resnet_model"]  # TODO  add the cfg
         runtime = trt.Runtime(TRT_LOGGER)
         f = open(engine_file, 'rb')
         self.engine = runtime.deserialize_cuda_engine(f.read())
         self.context = self.engine.create_execution_context()
     
     def get_embedding_local(self,face_resized):
-
+        """Run inference of TensorRT model on GPU loaded manually """
         input_img = face_resized
         bindings = []
         for binding in self.engine:
