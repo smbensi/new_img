@@ -5,6 +5,7 @@ import math
 from pathlib import Path
 import subprocess
 import time
+import glob
 
 import cv2
 import numpy as np
@@ -70,6 +71,37 @@ def check_imgsz(imgsz, stride=32, min_dim=1, max_dim=2, floor=0):
     sz = [sz[0], sz[0]] if min_dim == 2 and len(sz) == 1 else sz[0] if min_dim == 1 and len(sz) == 1 else sz
 
     return sz
+
+def check_file(file, suffix="", download=True, download_dir=".", hard=True):
+    """Search/download file (if necessary) and return path."""
+    check_suffix(file, suffix) # optional
+    file = str(file).strip() # convert to string and strip spaces
+    if (
+        not file
+        or ("://" not in file and Path(file).exists())
+        or file.lower().startswith("grpc://")
+    ): # file exists or gRPC Triton images
+        return file
+    elif download and file.lower().startswith(("https://", "http://", "rtsp://", "rtmp://", "tcp://")): # download
+        url = file
+        file = Path(download_dir) / url2file(file)
+        if file.exists():
+            LOGGER.info(f"Found {clean_url(url)} locally at {file}") # file already exists
+        else:
+            downloads.safe_download(url=url, file=file, unzip=False)
+        return str(file)
+    else: # search
+        files = glob.glob(str(ROOT / "**" / file), recursive=True) or glob.glob(str(ROOT.parent / file)) # find file
+        if not files and hard:
+            raise FileNotFoundError(f"'{file}' does not exist")
+        elif len(files) > 1 and hard:
+            raise FileNotFoundError(f"Multiple files match '{file}', specify exact path: {files}")
+        return files[0] if len(files) else [] # return file
+
+
+def check_yaml(file, suffix=(".yaml",".yml"), hard=True):
+    """Search/download YAML file (if necessary) and return path, checking suffix"""
+    return check_file(file, suffix, hard=hard)
 
 def check_imshow(warn=False):
     """Check if environment supports image displays"""

@@ -8,11 +8,11 @@ from img_xtend.utils.triton import TritonRemoteModel
 
 USE_TRITON = True   #TODO add  to the config
 
-class FaceRecognition:
+class ResNetModel: 
     def __init__(
         self,
-        similarity_tresh,
-        new_person_thresh,
+        similarity_tresh=0.75,
+        new_person_thresh=1.25,
         ):
         
         self.similarity_thresh = similarity_tresh
@@ -109,7 +109,7 @@ class FaceRecognition:
 
 # test
 
-a = FaceRecognition(0.75, 1.25)
+a = ResNetModel()
 
 img = cv2.imread("Jake/2022-01-23-180541_1.jpg")
 print(img.dtype)
