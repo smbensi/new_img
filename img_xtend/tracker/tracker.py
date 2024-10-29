@@ -3,14 +3,16 @@ import os
 
 import numpy as np
 
-from img_xtend.utils import logger, keypoints, get_time, log_to_file
+from img_xtend.utils import LOGGER, get_time, log_to_file
 from img_xtend.detection.bbox import Bbox
-from . import linear_assignment, iou_matching
-from matching.match_dataclass import MatchData
-from check_embedding import add_new_detection
-from track import Track
-from img_xtend.settings import tracker_settings, integration_settings
-
+from . import linear_assignment 
+from img_xtend.tracker.matching import iou_matching
+from img_xtend.tracker.matching.match_dataclass import MatchData
+from img_xtend.tracker.check_embedding import add_new_detection
+from img_xtend.tracker.track import Track
+from img_xtend.tracker import tracker_settings
+from img_xtend.pose_estimation import keypoints
+from img_xtend.pipelines.follow_person import integration_settings
 class Tracker:
     
     def __init__(
@@ -59,7 +61,7 @@ class Tracker:
             # for el in self.last_tracks_detected:
             for track in self.tracks:
                 if track.id in self.last_tracks_detected and track.is_followed and track.miss == 0:
-                    # logger.debug(f"detections: {len(bboxes)}, previous detections: {self.last_number_of_detections} tracks detected: {self.last_tracks_detected} appearance matrix: {cost_matrix_log}")
+                    # LOGGER.debug(f"detections: {len(bboxes)}, previous detections: {self.last_number_of_detections} tracks detected: {self.last_tracks_detected} appearance matrix: {cost_matrix_log}")
                     
                     if len(cost_matrix_log)>0 and cost_matrix_log[0,0] < 1:
                         matches=[(self.last_tracks_detected.index(track.id),0)]
@@ -87,7 +89,7 @@ class Tracker:
             try:
                 matches_manual, logs_manual_match = self.manual_match(bboxes, cost_matrix_log) 
             except Exception as e:
-                logger.debug(f"PROBLEM MANUAL MATCH: {e}")
+                LOGGER.debug(f"PROBLEM MANUAL MATCH: {e}")
                 matches_manual =[]
                 
         # Run matching cascade 
@@ -106,7 +108,7 @@ class Tracker:
                 unmatched_tracks.remove(track_idx) if track_idx in unmatched_tracks else None
                 unmatched_bbox.remove(bbox_idx) if bbox_idx in unmatched_bbox else None     
 
-        # logger.debug(f"{matches=}")
+        # LOGGER.debug(f"{matches=}")
         # matches contains tuples indicating association between tracks and bboxes in the frame
         for track_idx, bbox_idx in matches:
             add_embedding = False   
@@ -114,9 +116,9 @@ class Tracker:
                 integration_settings.MATCHES_SOURCE[matches_from] += 1
                 integration_settings.MATCHES_SOURCE["FRAMES"] += 1
                 add_embedding = add_new_detection(matches_from, cost_matrix_log, bboxes, *match_data.index_in_cost_matrix)
-                logger.debug(f"{matches_from=} {cost_matrix_log=} {add_embedding=}")
+                LOGGER.debug(f"{matches_from=} {cost_matrix_log=} {add_embedding=}")
                 if matches_from != self.last_matches_from and matches_from in integration_settings.MATCHES_TO_PRINT:
-                    # logger.debug(f"match from: {logs_matches_from}")
+                    # LOGGER.debug(f"match from: {logs_matches_from}")
                     self.last_matches_from = matches_from
                         
             try:
@@ -124,7 +126,7 @@ class Tracker:
                 argmin_val = argmin_matrix[match_data.index_in_cost_matrix[0], match_data.index_in_cost_matrix[1]]
                 self.tracks[track_idx].update(bboxes[bbox_idx],match_data,argmin_val, add_embedding=add_embedding , similarity_val=similarity_val, matches_from=matches_from)
             except IndexError as e:
-                logger.debug(f"ERROR IN UPDATE {e} \n {matches_from=} {cost_matrix_log=} \n {track_idx=},{bbox_idx=},{matches=} \n matches_appearance: {match_data.matches_appearance} \n matches_iou: {match_data.matches_iou},\n{argmin_matrix=} \n{self.tracks=}, \n{bboxes=}")
+                LOGGER.debug(f"ERROR IN UPDATE {e} \n {matches_from=} {cost_matrix_log=} \n {track_idx=},{bbox_idx=},{matches=} \n matches_appearance: {match_data.matches_appearance} \n matches_iou: {match_data.matches_iou},\n{argmin_matrix=} \n{self.tracks=}, \n{bboxes=}")
                 
         for track_idx in unmatched_tracks:
             self.tracks[track_idx].mark_missed()
@@ -145,7 +147,7 @@ class Tracker:
         #         continue
         #     features += track.features                      # list of all the embeddings contained in tracks
         #     targets += [track.id for _ in track.features]   # list of list of repeated id for each features' element
-        # # logger.debug(f'{len(features)=} and {active_targets=} and {targets=}')
+        # # LOGGER.debug(f'{len(features)=} and {active_targets=} and {targets=}')
         # self.metric.partial_fit(
         #     np.asarray(features), np.asarray(targets), active_targets
         # )
@@ -169,9 +171,9 @@ class Tracker:
             features = np.array([bboxes[i].emb for i in bbox_indices])
             # targets = np.array([tracks[i].id for i in track_indices])
             targets = np.array([tracks[i] for i in track_indices])
-            # logger.debug(f'TARGETS IN THE FRAME  ARE {targets}')
+            # LOGGER.debug(f'TARGETS IN THE FRAME  ARE {targets}')
             cost_matrix = self.metric.distance(features, targets,tracks)
-            # logger.debug(f'GATED METRIC {cost_matrix=}')
+            # LOGGER.debug(f'GATED METRIC {cost_matrix=}')
             return cost_matrix
         
         matches_appearance, unmatched_tracks_appearance, unmatched_bboxes, logs_data_appearance = linear_assignment.matching_cascade(
@@ -205,7 +207,7 @@ class Tracker:
             # if len(matches_b) > 0:
         except Exception as e:
             matches_iou, unmatched_tracks_iou, unmatched_detections = [], [], []
-            logger.debug(f"ERROR: {e}")
+            LOGGER.debug(f"ERROR: {e}")
 
         return matches_iou, unmatched_tracks_iou, unmatched_detections, logs_data_iou
         
@@ -289,4 +291,4 @@ class Tracker:
         for i, track in enumerate(self.tracks):
             if track.id == index:
                 self.tracks[i].change_follow_status()
-                logger.debug(f'self.tracks[{i}]={self.tracks[i]}')
+                LOGGER.debug(f'self.tracks[{i}]={self.tracks[i]}')

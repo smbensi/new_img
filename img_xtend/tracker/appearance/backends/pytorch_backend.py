@@ -1,9 +1,9 @@
 import numpy as np
 from pathlib import Path
 
-from img_xtend.pipelines.custom_tracking.appearance.backends.base_backend import BaseModelBackend
+from img_xtend.tracker.appearance.backends.base_backend import BaseModelBackend
 
-from img_xtend.pipelines.custom_tracking.appearance.reid_model_factory import (
+from img_xtend.tracker.appearance.reid_model_factory import (
     load_pretrained_weights,
 )
 

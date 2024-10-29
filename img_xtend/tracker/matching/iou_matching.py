@@ -4,9 +4,9 @@ from __future__ import absolute_import
 
 import numpy as np
 
-from . import linear_assignment
+from img_xtend.tracker import linear_assignment
 
-from img_xtend.utils import logger
+from img_xtend.utils import LOGGER
 
 def iou(bbox, candidates):
     """Computer intersection over union.
@@ -86,6 +86,6 @@ def iou_cost(tracks, detections, track_indices=None, detection_indices=None):
         candidates = np.asarray([detections[i].tlwh for i in detection_indices])
         cost_matrix[row, :] = 1.0 - iou(bbox, candidates)
     # if np.any(cost_matrix != 0):
-    #     logger.debug(f"tracks {[tracks[track_idx].id for track_idx in track_indices]} COST MATRIX IOU : {cost_matrix}")
-    # logger.debug(f"cost_matrix iou: {cost_matrix}")   
+    #     LOGGER.debug(f"tracks {[tracks[track_idx].id for track_idx in track_indices]} COST MATRIX IOU : {cost_matrix}")
+    # LOGGER.debug(f"cost_matrix iou: {cost_matrix}")   
     return cost_matrix, np.zeros((len(track_indices), len(detection_indices)))

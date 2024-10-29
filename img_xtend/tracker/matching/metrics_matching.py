@@ -4,9 +4,9 @@ import scipy
 import torch
 from scipy.spatial.distance import cdist
 # TODO
-from boxmot.utils.iou import iou_batch
+# from img_xtend.tracker.utils.iou import iou_batch
 # END TODO
-from img_xtend.utils import logger
+from img_xtend.utils import LOGGER
 
 """
 Table for the 0.95 quantile of the chi-square distribution with N degrees of

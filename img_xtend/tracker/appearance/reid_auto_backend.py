@@ -9,11 +9,11 @@ from img_xtend.tracker.utils.torch_utils import select_device
 from img_xtend.tracker.appearance import export_formats
 from img_xtend.tracker.appearance.backends.base_backend import BaseModelBackend
 from img_xtend.tracker.appearance.backends.pytorch_backend import PyTorchBackend
-from boxmot.appearance.backends.onnx_backend import ONNXBackend
-from boxmot.appearance.backends.openvino_backend import OpenVinoBackend
-from boxmot.appearance.backends.tensorrt_backend import TensorRTBackend
-from boxmot.appearance.backends.tflite_backend import TFLiteBackend
-from boxmot.appearance.backends.torchscript_backend import TorchscriptBackend
+# from boxmot.appearance.backends.onnx_backend import ONNXBackend
+# from boxmot.appearance.backends.openvino_backend import OpenVinoBackend
+# from boxmot.appearance.backends.tensorrt_backend import TensorRTBackend
+# from boxmot.appearance.backends.tflite_backend import TFLiteBackend
+# from boxmot.appearance.backends.torchscript_backend import TorchscriptBackend
 # END TODO
 
 
@@ -48,7 +48,7 @@ class ReidAutoBackend():
         self.half = half
 
 
-    def get_backend(self) -> Union['PyTorchBackend', 'TorchscriptBackend', 'ONNXBackend', 'TensorRTBackend', 'OpenVinoBackend', 'TFLiteBackend']:
+    def get_backend(self): # -> Union['PyTorchBackend', 'TorchscriptBackend', 'ONNXBackend', 'TensorRTBackend', 'OpenVinoBackend', 'TFLiteBackend']:
         """
         Returns an instance of the appropriate backend based on the model type.
 
@@ -62,11 +62,11 @@ class ReidAutoBackend():
         # Mapping of conditions to backend constructors
         backend_map = {
             self.pt: PyTorchBackend,
-            self.jit: TorchscriptBackend,
-            self.onnx: ONNXBackend,
-            self.engine: TensorRTBackend,
-            self.xml: OpenVinoBackend,
-            self.tflite: TFLiteBackend
+            # self.jit: TorchscriptBackend,
+            # self.onnx: ONNXBackend,
+            # self.engine: TensorRTBackend,
+            # self.xml: OpenVinoBackend,
+            # self.tflite: TFLiteBackend
         }
 
         # Iterate through the mapping and return the first matching backend

@@ -5,9 +5,9 @@ from __future__ import absolute_import
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
-from img_xtend.utils.matching import chi2inv95
-from img_xtend.utils.bbox import Bbox
-from img_xtend.utils import logger, get_time
+from img_xtend.tracker.matching.metrics_matching import chi2inv95
+from img_xtend.detection.bbox import Bbox
+from img_xtend.utils import LOGGER, get_time
 
 INFTY_COST = 1e5
 
@@ -75,7 +75,7 @@ def min_cost_matching(
     try:
         cost_matrix, argmin_matrix = distance_metric(tracks, detections, track_indices, detection_indices)
     except Exception as e:
-        logger.debug(f"{e}")
+        LOGGER.debug(f"{e}")
         cost_matrix, argmin_matrix = np.empty((1,1)),np.empty((1,1))
     cost_matrix_log = np.array(cost_matrix, copy=True)
     cost_matrix[cost_matrix > max_distance] = max_distance + 1e-5
@@ -88,7 +88,7 @@ def min_cost_matching(
     #             new_match = (i, index)
     #             matches.append(new_match)
     #             if distance_metric.__name__ == "iou_cost":
-    #                 logger.debug(f"distance_metric: {distance_metric.__name__} adequation with followed ID: {cost_matrix[i,:]} and argmin {np.argmin(cost_matrix[i,:])} and {new_match=}")
+    #                 LOGGER.debug(f"distance_metric: {distance_metric.__name__} adequation with followed ID: {cost_matrix[i,:]} and argmin {np.argmin(cost_matrix[i,:])} and {new_match=}")
     #             cost_matrix = np.delete(cost_matrix,i, axis=0)
     #             cost_matrix = np.delete(cost_matrix, index, axis=1)
                 
@@ -120,7 +120,7 @@ def min_cost_matching(
                 new_match = (i, index)
                 if new_match in matches:
                     continue
-                logger.debug(f"{get_time()}: {new_match=} added to {matches=} method {distance_metric.__name__}")
+                LOGGER.debug(f"{get_time()}: {new_match=} added to {matches=} method {distance_metric.__name__}")
                 matches = [(trk_idx,bbox_idx) for trk_idx,bbox_idx in matches if bbox_idx != index]
                 matches.append(new_match)
     
@@ -129,7 +129,7 @@ def min_cost_matching(
     logs_data = {}
     logs_data["cost_matrix_log"]  = cost_matrix_log
     logs_data["argmin_matrix"]  = argmin_matrix
-    # logger.debug(f'{cost_matrix_log=} and {track_indices=} and track_ids:{[tracks[i].id for i in track_indices]} and  {max_distance=}')
+    # LOGGER.debug(f'{cost_matrix_log=} and {track_indices=} and track_ids:{[tracks[i].id for i in track_indices]} and  {max_distance=}')
 
     return matches, unmatched_tracks, unmatched_detections, logs_data
 

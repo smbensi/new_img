@@ -88,6 +88,9 @@ def get_time():
     now = datetime.datetime.now()
     return f"{now.minute:02d}:{now.second:02d}"
 
+def log_to_file(file:str, sentence:str):
+    with open(file,'a') as file:
+        file.write(sentence)
 
 def emojis(string=""):
     """Return platform-dependent emoji-safe version of string"""

@@ -2,7 +2,7 @@ import os
 import json
 from pathlib import Path
 
-from img_xtend.utils import get_time
+from img_xtend.utils import get_time, is_docker
 
 FILE = Path(__file__)
 ROOT = FILE.parents[2]
@@ -16,10 +16,11 @@ INIT_TRACKER = False
 TRACKER = os.getenv('TRACKER', 'STRONG_SORT')
 SHOW_YOLO_DETECTION = (os.getenv('SHOW_YOLO_DETECTION', 'True') == 'True')
 
-if int(os.getenv("NOT_IN_DOCKER","0")):
-    path = '/home/nvidia/dev/nlp/tests/test_data/objects.json'
-else:
+if is_docker():
     path = '/code/shared/ml-artifacts/object_detection/objects.json'
+else:
+    path = '/home/nvidia/dev/nlp/tests/test_data/objects.json'
+    
 with open(path) as f:
     data = json.load(f)
 list_of_objects = data["objects"]

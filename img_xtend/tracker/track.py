@@ -3,9 +3,11 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from img_xtend.utils import logger, keypoints, get_time, log_to_file
+from img_xtend.utils import LOGGER, get_time, log_to_file
 from img_xtend.detection.bbox import Bbox
-from img_xtend.settings import tracker_settings, integration_settings
+from img_xtend.pose_estimation import keypoints
+from img_xtend.tracker import tracker_settings
+from img_xtend.pipelines.follow_person import integration_settings
 
 
 class TrackState:
@@ -174,20 +176,20 @@ in_frame={self.in_frame}]\n"
     ):
         # update son State
         # update son bbox, cls, 
-        # logger.debug(f"{person_state=}")
+        # LOGGER.debug(f"{person_state=}")
         self.emb_added = False   
         
         bbox_state = keypoints.check_person_state(bbox.keypoints)
-        # logger.debug(f"{bbox_state = }")
+        # LOGGER.debug(f"{bbox_state = }")
         
         if time() - self.last_time_update > 0.5 and add_embedding:
-            # logger.debug(f"{similarity_index=}")
+            # LOGGER.debug(f"{similarity_index=}")
             if self.check_valid_embedding(bbox):
                 try:
                     if bbox_state != self.features_state[int(similarity_index)]:
-                        logger.debug("DIFFERENT PERSON STATE BETWEEN THE FEATURES")
+                        LOGGER.debug("DIFFERENT PERSON STATE BETWEEN THE FEATURES")
                 except:
-                    logger.debug("NO FEATURE STATE INDEX")
+                    LOGGER.debug("NO FEATURE STATE INDEX")
                     
                 sentence_to_log = f"\n{get_time()}: {matches_from}: new features to followed ID_{self.id}  hits= {self.hits} similarity with {self.similarity_detection[int(similarity_index)]} and similiraty_val={similarity_val:.3f}"
                 
@@ -196,7 +198,7 @@ in_frame={self.in_frame}]\n"
                     log_to_file(integration_settings.NEW_DETECTION_INFO_FILE,
                                 f"appearance_cost: {match_data.appearance_cost} and bboxes: {match_data.bboxes} \n")
                     
-                # logger.debug(sentence_to_log)
+                # LOGGER.debug(sentence_to_log)
                 
                 log_to_file(integration_settings.NEW_DETECTION_INFO_FILE,f"hits and positions={[(i,j, k) for i,j,k in zip(self.similarity_detection, self.features_state, self.detection_from)]} \n ")
                 
@@ -239,7 +241,7 @@ in_frame={self.in_frame}]\n"
     
     def change_follow_status(self):
         self.track_followed = True
-        logger.debug(f'$$$ TRACK FOLLOWED: {self.id}   $$$')
+        LOGGER.debug(f'$$$ TRACK FOLLOWED: {self.id}   $$$')
         
     def check_valid_embedding(self, bbox:Bbox) -> bool:
         from .check_embedding import check_embedding
