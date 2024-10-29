@@ -1,0 +1,258 @@
+# Mikel Broström 🔥 Yolo Tracking 🧾 AGPL-3.0 license
+
+from __future__ import absolute_import
+
+import numpy as np
+from scipy.optimize import linear_sum_assignment
+
+from img_xtend.utils.matching import chi2inv95
+from img_xtend.utils.bbox import Bbox
+from img_xtend.utils import logger, get_time
+
+INFTY_COST = 1e5
+
+def compute_emb_distance(track, bbox:Bbox, metric):
+    features = np.array(track.embds)
+    targets = np.array(bbox.emb)
+    cost_matrix = metric.distance(targets, features)
+    
+
+def matching_appearance(tracks, bboxes, metric):
+    if not tracks or not bboxes:
+        return ()
+    else:
+        cost_matrix = np.ones((len(tracks),len(bboxes)))
+        for i,track in enumerate(tracks):
+            for j,bbox in enumerate(bboxes):
+                cost_matrix[i,j] = compute_emb_distance(track, bbox, metric)
+            
+
+def min_cost_matching(
+    distance_metric,
+    max_distance,
+    tracks,
+    detections,
+    track_indices=None,
+    detection_indices=None,
+):
+    """Solve linear assignment problem.
+    Parameters
+    ----------
+    distance_metric : Callable[List[Track], List[Detection], List[int], List[int]) -> ndarray
+        The distance metric is given a list of tracks and detections as well as
+        a list of N track indices and M detection indices. The metric should
+        return the NxM dimensional cost matrix, where element (i, j) is the
+        association cost between the i-th track in the given track indices and
+        the j-th detection in the given detection_indices.
+    max_distance : float
+        Gating threshold. Associations with cost larger than this value are
+        disregarded.
+    tracks : List[track.Track]
+        A list of predicted tracks at the current time step.
+    detections : List[detection.Detection]
+        A list of detections at the current time step.
+    track_indices : List[int]
+        List of track indices that maps rows in `cost_matrix` to tracks in
+        `tracks` (see description above).
+    detection_indices : List[int]
+        List of detection indices that maps columns in `cost_matrix` to
+        detections in `detections` (see description above).
+    Returns
+    -------
+    (List[(int, int)], List[int], List[int])
+        Returns a tuple with the following three entries:
+        * A list of matched track and detection indices.
+        * A list of unmatched track indices.
+        * A list of unmatched detection indices.
+    """
+    if track_indices is None:
+        track_indices = np.arange(len(tracks))
+    if detection_indices is None:
+        detection_indices = np.arange(len(detections))
+
+    if len(detection_indices) == 0 or len(track_indices) == 0:
+        return [], track_indices, detection_indices, {}  # Nothing to match.
+    try:
+        cost_matrix, argmin_matrix = distance_metric(tracks, detections, track_indices, detection_indices)
+    except Exception as e:
+        logger.debug(f"{e}")
+        cost_matrix, argmin_matrix = np.empty((1,1)),np.empty((1,1))
+    cost_matrix_log = np.array(cost_matrix, copy=True)
+    cost_matrix[cost_matrix > max_distance] = max_distance + 1e-5
+    
+    # matches, unmatched_tracks, unmatched_detections = [], [], []
+    # for i in track_indices:
+    #     if tracks[i].is_followed:
+    #         index = np.argmin(cost_matrix[i,:])
+    #         if cost_matrix[i,index] < max_distance:
+    #             new_match = (i, index)
+    #             matches.append(new_match)
+    #             if distance_metric.__name__ == "iou_cost":
+    #                 logger.debug(f"distance_metric: {distance_metric.__name__} adequation with followed ID: {cost_matrix[i,:]} and argmin {np.argmin(cost_matrix[i,:])} and {new_match=}")
+    #             cost_matrix = np.delete(cost_matrix,i, axis=0)
+    #             cost_matrix = np.delete(cost_matrix, index, axis=1)
+                
+                
+    if cost_matrix.shape[0] > 0:
+        row_indices, col_indices = linear_sum_assignment(cost_matrix)
+
+        matches, unmatched_tracks, unmatched_detections = [], [], []
+        for col, detection_idx in enumerate(detection_indices):
+            if col not in col_indices:
+                unmatched_detections.append(detection_idx)
+        for row, track_idx in enumerate(track_indices):
+            if row not in row_indices:
+                unmatched_tracks.append(track_idx)
+        for row, col in zip(row_indices, col_indices):
+            track_idx = track_indices[row]
+            detection_idx = detection_indices[col]
+            if cost_matrix[row, col] > max_distance:
+                unmatched_tracks.append(track_idx)
+                unmatched_detections.append(detection_idx)
+            else:
+                matches.append((track_idx, detection_idx))
+    
+    for i in unmatched_tracks:
+        if tracks[i].is_followed:
+            
+            index = np.argmin(cost_matrix[i,:])
+            if cost_matrix[i,index] < max_distance:
+                new_match = (i, index)
+                if new_match in matches:
+                    continue
+                logger.debug(f"{get_time()}: {new_match=} added to {matches=} method {distance_metric.__name__}")
+                matches = [(trk_idx,bbox_idx) for trk_idx,bbox_idx in matches if bbox_idx != index]
+                matches.append(new_match)
+    
+    matches = list(set(matches))
+    
+    logs_data = {}
+    logs_data["cost_matrix_log"]  = cost_matrix_log
+    logs_data["argmin_matrix"]  = argmin_matrix
+    # logger.debug(f'{cost_matrix_log=} and {track_indices=} and track_ids:{[tracks[i].id for i in track_indices]} and  {max_distance=}')
+
+    return matches, unmatched_tracks, unmatched_detections, logs_data
+
+
+def matching_cascade(
+    distance_metric,
+    max_distance,
+    cascade_depth,
+    tracks,
+    detections,
+    track_indices=None,
+    detection_indices=None,
+):
+    """Run matching cascade.
+    Parameters
+    ----------
+    distance_metric : Callable[List[Track], List[Detection], List[int], List[int]) -> ndarray
+        The distance metric is given a list of tracks and detections as well as
+        a list of N track indices and M detection indices. The metric should
+        return the NxM dimensional cost matrix, where element (i, j) is the
+        association cost between the i-th track in the given track indices and
+        the j-th detection in the given detection indices.
+    max_distance : float
+        Gating threshold. Associations with cost larger than this value are
+        disregarded.
+    cascade_depth: int
+        The cascade depth, should be se to the maximum track age.
+    tracks : List[track.Track]
+        A list of predicted tracks at the current time step.
+    detections : List[detection.Detection]
+        A list of detections at the current time step.
+    track_indices : Optional[List[int]]
+        List of track indices that maps rows in `cost_matrix` to tracks in
+        `tracks` (see description above). Defaults to all tracks.
+    detection_indices : Optional[List[int]]
+        List of detection indices that maps columns in `cost_matrix` to
+        detections in `detections` (see description above). Defaults to all
+        detections.
+    Returns
+    -------
+    (List[(int, int)], List[int], List[int])
+        Returns a tuple with the following three entries:
+        * A list of matched track and detection indices.
+        * A list of unmatched track indices.
+        * A list of unmatched detection indices.
+    """
+    if track_indices is None:
+        track_indices = list(range(len(tracks)))
+    if detection_indices is None:
+        detection_indices = list(range(len(detections)))
+
+    unmatched_detections = detection_indices
+    matches = []
+    track_indices_l = [k for k in track_indices]
+    matches_l, _, unmatched_detections, logs_data = min_cost_matching(
+        distance_metric,
+        max_distance,
+        tracks,
+        detections,
+        track_indices_l,
+        unmatched_detections,
+    )
+    matches += matches_l
+    unmatched_tracks = list(set(track_indices) - set(k for k, _ in matches))
+    return matches, unmatched_tracks, unmatched_detections, logs_data
+
+
+def gate_cost_matrix(
+    cost_matrix,
+    tracks,
+    detections,
+    track_indices,
+    detection_indices,
+    mc_lambda,
+    gated_cost=INFTY_COST,
+    only_position=False,
+):
+    """Invalidate infeasible entries in cost matrix based on the state
+    distributions obtained by Kalman filtering.
+    Parameters
+    ----------
+    kf : The Kalman filter.
+    cost_matrix : ndarray
+        The NxM dimensional cost matrix, where N is the number of track indices
+        and M is the number of detection indices, such that entry (i, j) is the
+        association cost between `tracks[track_indices[i]]` and
+        `detections[detection_indices[j]]`.
+    tracks : List[track.Track]
+        A list of predicted tracks at the current time step.
+    detections : List[detection.Detection]
+        A list of detections at the current time step.
+    track_indices : List[int]
+        List of track indices that maps rows in `cost_matrix` to tracks in
+        `tracks` (see description above).
+    detection_indices : List[int]
+        List of detection indices that maps columns in `cost_matrix` to
+        detections in `detections` (see description above).
+    gated_cost : Optional[float]
+        Entries in the cost matrix corresponding to infeasible associations are
+        set this value. Defaults to a very large value.
+    only_position : Optional[bool]
+        If True, only the x, y position of the state distribution is considered
+        during gating. Defaults to False.
+    Returns
+    -------
+    ndarray
+        Returns the modified cost matrix.
+    """
+    
+    gating_threshold = chi2inv95[4]
+    measurements = np.asarray([detections[i].to_xyah() for i in detection_indices])
+    for row, track_idx in enumerate(track_indices):
+        track = tracks[track_idx]
+        gating_distance = track.kf.gating_distance(
+            track.mean,
+            track.covariance,
+            measurements,
+            only_position
+        )
+        cost_matrix[row, gating_distance > gating_threshold] = gated_cost
+        cost_matrix[row] = (
+            mc_lambda * cost_matrix[row] + (1 - mc_lambda) * gating_distance
+        )
+    return cost_matrix
+
+

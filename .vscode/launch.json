@@ -4,6 +4,16 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+        
+
+        {
+            "name": "all_apps",
+            "type": "python",
+            "request": "launch",
+            "module": "img_xtend.applications.all_apps",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
         {
             "name": "test_load_model",
             "type": "python",

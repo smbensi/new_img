@@ -1,0 +1,66 @@
+STRONG_SORT:
+  reid_weights: 'OSNET'
+  # reid_weights: 'MOBILENET'
+  device_id: 0                # Cuda GPU ID
+  fp16: False                  # Enable FP16
+  max_dist: 0.15                # Prev: 0.2 The matching threshold. Samples with larger distance are considered an invalid match
+  max_iou_dist: 0.85          # Prev: 0.2 Gating threshold. Associations with cost larger than this value are disregarded.
+  max_age: 60                # Maximum number of missed misses before a track is deleted
+  n_init: 1                   # Number of frames that a track remains in initialization phase
+  nn_budget: 50               # Maximum size of the appearance descriptors gallery
+  mc_lambda: 0.995            # matching with both appearance (1 - MC_LAMBDA) and motion cost
+  ema_alpha: 0.9              # updates  appearance  state in  an exponential moving average manner
+
+DEEP_OC_SORT:
+  reid_weights: 'RESNET'
+  device_id: 0                # Cuda GPU ID
+  fp16: True                  # Enable FP16
+  max_age: 1200
+  per_class: True
+  det_thresh: 0.5 #increased from 0.3 to 0.5 to remove uncertain detected objects
+  min_hits: 3
+  iou_threshold: 0.3 #decreasing this makes further(smaller objects prone to perturbation)
+  delta_t: 3
+  asso_func: "giou" #https://github.com/mikel-brostrom/yolo_tracking/issues/1246
+  inertia: 0.5 #increased from 0.2 to 0.5 increasing this seems to make it more resilient to motion
+  w_association_emb: 0.5
+  alpha_fixed_emb: 0.95
+  aw_param: 0.5
+  embedding_off: False
+  cmc_off: False
+  aw_off: False
+  new_kf_off: False
+
+BOT_SORT:
+  reid_weights: 'RESNET'
+  device_id: 0                
+  fp16: True                  
+  track_high_thresh: 0.5
+  track_low_thresh: 0.1
+  new_track_thresh: 0.6
+  track_buffer: 30
+  match_thresh: 0.8
+  proximity_thresh: 0.5
+  appearance_thresh: 0.25
+  cmc_method: "sparseOptFlow"
+  frame_rate: 20
+  fuse_first_associate: False
+  with_reid: True
+
+BYTE_TRACK:
+  track_thresh: 0.45
+  match_thresh: 0.8
+  track_buffer: 25
+  frame_rate: 30
+  per_class: True
+
+OC_SORT:
+  per_class: False
+  det_thresh: 0.2
+  max_age: 30
+  min_hits: 3
+  asso_threshold: 0.3
+  delta_t: 3
+  asso_func: "iou"
+  inertia: 0.2
+  use_byte: False

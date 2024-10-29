@@ -13,8 +13,10 @@ import threading
 import time
 import urllib
 import uuid
+import json
 from pathlib import Path
 from types import SimpleNamespace
+import datetime
 from typing import Union
 
 import cv2
@@ -81,11 +83,29 @@ def set_logging(name="LOGGING_NAME", verbose=True):
 # Set logger
 LOGGER = set_logging(LOGGING_NAME, verbose=VERBOSE)
 
+
+def get_time():
+    now = datetime.datetime.now()
+    return f"{now.minute:02d}:{now.second:02d}"
+
+
 def emojis(string=""):
     """Return platform-dependent emoji-safe version of string"""
     return string.environ().decode("ascii", "ignore") if WINDOWS else string
 
+def is_ubuntu() -> bool:
+    """
+    Check if the OS is Ubuntu
 
+    Returns:
+        bool: True if OS is Ubuntu, False otherwise
+    """
+    try:
+        with open("/etc/os-release") as f:
+            return "ID=ubuntu" in f.read()
+    except FileNotFoundError:
+        return False
+    
 def is_docker() -> bool:
     """
     Determine if the script is running inside a Docker container
@@ -142,6 +162,18 @@ def is_online() -> bool:
 
 ONLINE = is_online()
 
+
+def is_dir_writeable(dir_path: Union[str, Path]) -> bool:
+    """
+    Check if a directory is writeable
+    
+    Args:
+        dir_path (Union[str, Path]): the path to the directory
+
+    Returns:
+        bool: True if the directory is writeable, False otherwise
+    """
+    return os.access(str(dir_path), os.W_OK)
 
 class IterableSimpleNamespace(SimpleNamespace):
     """It's an extension class of SimpleNamespace that adds iterable functionality and enables usage with dict() and for loops"""
@@ -303,3 +335,115 @@ class TryExcept(contextlib.ContextDecorator):
         if self.verbose and value:
             print(emojis(f"{self.msg}{': ' if self.msg else ''}{value}"))
         return True
+    
+
+
+def clean_url(url):
+    """Strip auth from URL, i.e. https://url.com/file.txt?auth -> https://url.com/file.txt."""
+    url = Path(url).as_posix().replace(":/","://") # Pathlib turns :// -> :/, as_posix() for Windows
+    return urllib.parse.unquote(url).split("?")[0] # '%2F' to '/', split https://url.com/file.txt?auth
+
+def url2file(url):
+    """Convert URL to filename, i.e. https://url.com/file.txt?auth -> file.txt."""
+    return Path(clean_url(url)).name
+
+def threaded(func):
+    """
+    Multi-threads a target function by default and returns the thread or function result
+    
+    Use a @threaded decorator. The function runs in a separate thread unless 'threaded=False' is passed
+    """
+    def wrapper(*args, **kwargs):
+        """Multi-threads a given function based on 'threaded' kwarg and returns the thread or function result"""
+        if kwargs.pop("threaded", True): # run in thread
+            thread = threading.Thread(target=func, args=args, kwargs=kwargs, daemon=True)
+            thread.start()
+            return thread
+        else:
+            return func(*args, **kwargs)
+
+        return wrapper
+
+class JSONDict(dict):
+    """
+    A dictionary-like class that provides JSON persistance for its contents
+    
+    This class extends the built-in dictionary to automatically save its contents to a JSON file whenever they are modified. It ensures thread-safe operations using a lock
+
+    Attributes:
+        file_path (Path): The path to the JSON file used for persistance
+        lock (threading.Lock): A lock object to ensure thread-safe operations
+    
+    Methods:
+        _load: Loads the data from the JSON file into the dictionary
+        _save: Saves the current state of the dictionary to the JSON file
+        __setitem__: Stores a key-value pair and persists it to disk
+        __delitem__: Removes an item and updates the persistent storage
+        update: Updates the dictionary and persists changes
+        clear: Clears all entries and updates the persistent storage
+    """
+    
+    def __init__(self, file_path: Union[str,Path] = "data.json"):
+        """Initialize a JSONDict object with a specified file path for JSON persistence"""
+        super().__init__()
+        self.file_path = Path(file_path)
+        self.lock = Lock()
+        self._load()
+    
+    def _load(self):
+        """Load the data from the JSON file into the dictionary."""
+        try:
+            if self.file_path.exists():
+                with open(self.file_path) as f:
+                    self.update(json.load(f))
+        except json.JSONDecodeError:
+            print(f"Error for decoding JSON from {self.file_path}. Starting with an empty dictionary")
+        except Exception as e:
+            print(f"Error reading from {self.file_path}: {e}")
+    
+    def _save(self):
+        """Save the current state of the dictionary to the JSON file"""
+        try:
+            self.file_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.file_path, "w") as f:
+                json.dump(dict(self), f, indent=2, default=self._json_default)
+        except Exception as e:
+            print(f"Error writing to {self.file_path}: {e}")
+    
+    @staticmethod
+    def _json_default(obj):
+        """Handles JSON serialization of Path objects"""
+        if isinstance(obj, Path):
+            return str(obj)
+        raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+    def __setitem__(self, key, value):
+        """Store a key value pair and persist to disk"""
+        with self.lock:
+            super().__setitem__(key, value)
+            self._save()
+            
+    def __delitem__(self, key):
+        """Remove an item and update the persistent storage"""
+        with self.lock:
+            super().__delitem__(key)
+            self._save()
+    
+    def __str__(self):
+        """Return a pretty-printed JSON string representation of the dictionary"""
+        return f'JSONDict("{self.file_path}"):\n{json.dumps(dict(self), indent=2, ensure_ascii=False, default=self._json_default)}'
+        
+    def update(self, *args, **kwargs):
+        """Update the dictionary and persist changes"""
+        with self.lock:
+            super().update(*args, **kwargs)
+            self._save()
+    
+    def clear(self):
+        """Clear all entries and update the persistent storage"""
+        with self.lock:
+            super().clear()
+            self._save()
+    
+        
+    
