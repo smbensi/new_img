@@ -11,7 +11,7 @@ from img_xtend.tracker.appearance.reid_model_factory import (
     get_model_url,
     show_downloadable_models    
 )
- .from img_xtend.utils import logger as LOGGER
+from img_xtend.utils import LOGGER
 
 class BaseModelBackend:
     def __init__(self, weights, device, half):
