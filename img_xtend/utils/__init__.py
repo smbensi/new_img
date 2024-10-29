@@ -37,7 +37,7 @@ VERBOSE = str(os.getenv("YOLO_VERBOSE",True)).lower() == "true"
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[1]
 DEFAULT_CFG_PATH = ROOT / "cfg/default.yaml"
-
+ROOT_PARENT = ROOT.parent
 
 
 def set_logging(name="LOGGING_NAME", verbose=True):

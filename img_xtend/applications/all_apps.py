@@ -11,14 +11,15 @@ from img_xtend.tracker.follow_tracker import FollowTracker
 
 # Connect to MQTT if needed and send alive
 
-source = "0"
-dataset = load_inference_source(source)  # load the source of images
 
 # Create different object that will load the different models
 object_detection = YoloV8(pose=False)
 pose_estimation = YoloV8(pose=True)
 recognition = FaceRecognition()
 tracker = FollowTracker()
+
+source = "0"
+dataset = load_inference_source(source)  # load the source of images
 
 RUN_TRACKING=False
 RUN_FACE_RECOGNITION=False

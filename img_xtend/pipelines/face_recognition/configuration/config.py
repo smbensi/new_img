@@ -111,7 +111,7 @@ COLLECTION = None
 # ADD NEW PERSON PARAMETERS
 #### *************************
 DATA_SOURCE = "DB" if not "DATA_SOURCE" in os.environ else os.environ["DATA_SOURCE"]
-
+DATA_SOURCE = "JSON"
 
 #### ************************
 # UNKNOWN GREETING PARAMETERS

@@ -6,7 +6,7 @@ import json
 import numpy as np
 import pandas as pd
 
-from img_xtend.utils import LOGGER as logger
+from img_xtend.utils import LOGGER, ROOT_PARENT
 from img_xtend.pipelines.face_recognition.utils.get_data import (
     get_data_from_db,
     get_data_from_json,
@@ -39,7 +39,6 @@ class FaceRecognition():
     def __init__(self) -> None:
         
         self.faces_df = pd.DataFrame()
-        logger.debug(f"{self.faces_df.columns}=")
         self.recognition_model = ResNetModel()
         self.get_registered_faces()
         self.initialize_params()
@@ -49,11 +48,12 @@ class FaceRecognition():
         if source == "DB":
             self.faces_df = get_data_from_db()
         elif source=="JSON":
-            self.ids, self.names, self.face_vectors = get_data_from_json(f"/code/{os.environ['JSON_FILE']}")
+            # self.ids, self.names, self.face_vectors = get_data_from_json(f"{ROOT}/{os.environ['JSON_FILE']}")
+            self.ids, self.names, self.face_vectors = get_data_from_json(f"{ROOT_PARENT}/shared/Jakes_photos/1234.json")
             self.collections = ["user"]*len(self.names)
         else: 
             pass
-        logger.debug("*** DATA UPDATED ***")
+        LOGGER.debug("*** DATA UPDATED ***")
 
     def initialize_params(self, collectionNames=None):
         self.dict_known_faces = {}  # keys: id, value: {"frames","collectionName","last_seen",}
@@ -65,9 +65,9 @@ class FaceRecognition():
         # self.face_timeout = 0
         self.mqtt_params()
 
-        logger.debug(f"{collectionNames=}")
+        LOGGER.debug(f"{collectionNames=}")
         self.faces_df = filter_face_vecs(values=collectionNames)
-        logger.debug(f"{self.faces_df[['_id','name', 'collectionName']]=}")
+        LOGGER.debug(f"{self.faces_df[['_id','name', 'collectionName']]=}")
         
         
         # for debugging
@@ -103,7 +103,7 @@ class FaceRecognition():
         
         # for debugging
         if self.last_len_of_unreco_list != len(self.list_unknown_faces):
-            logger.debug(f"length list unrecognized changed: BEFORE: {self.last_len_of_unreco_list} NOW {len(self.list_unknown_faces)}")
+            LOGGER.debug(f"length list unrecognized changed: BEFORE: {self.last_len_of_unreco_list} NOW {len(self.list_unknown_faces)}")
         self.last_len_of_unreco_list = len(self.list_unknown_faces)
         # end for debugging
         
@@ -127,7 +127,7 @@ class FaceRecognition():
                                                     last_seen=time.time(),
                                                     bbox=face_bbox,
                                                     index = self.index_unknown))
-            logger.debug(f"Create new unknown face with id: {self.index_unknown}")
+            LOGGER.debug(f"Create new unknown face with id: {self.index_unknown}")
             self.index_unknown +=1
         
         else:
@@ -155,7 +155,7 @@ class FaceRecognition():
                     
                     nb_of_frames = self.list_unknown_faces[i].frames 
                     if (nb_of_frames <= 60 and nb_of_frames % 15 == 0) or (nb_of_frames>60 and nb_of_frames%100 == 0):
-                        logger.debug(f"index:{i:<5} distance:{dist:<5.2f} frames:{self.list_unknown_faces[i].frames}")
+                        LOGGER.debug(f"index:{i:<5} distance:{dist:<5.2f} frames:{self.list_unknown_faces[i].frames}")
                     # break
                 else:
                     self.list_unknown_faces[i].miss += 1
@@ -172,17 +172,17 @@ class FaceRecognition():
                     self.index_unknown+=1
                     unreco_ids.append(len(self.list_unknown_faces)-1)
                 except Exception as e:
-                    logger.debug(e)
+                    LOGGER.debug(e)
 
             if debug_min_dist > cfg.SIMILARITY_THRESHOLD_UNKNOWN \
             and debug_min_dist <self.previous_min_dist_unknown \
             and debug_index_min != self.previous_min_unknown_index:
-                logger.debug(f"min dist:{debug_min_dist:.2f} from unknown index:{debug_index_min}")
+                LOGGER.debug(f"min dist:{debug_min_dist:.2f} from unknown index:{debug_index_min}")
                 self.previous_min_dist_unknown = debug_min_dist
                 self.previous_min_unknown_index = debug_index_min
         
         if len(unreco_ids)> 1:
-            logger.debug(f"ONE VECTOR IS ADAPTED TO MULTIPLE UNRECO IDS: {unreco_ids=}")
+            LOGGER.debug(f"ONE VECTOR IS ADAPTED TO MULTIPLE UNRECO IDS: {unreco_ids=}")
             # merge same faces
             self._delete_elements_from_list(unreco_ids[1:], "unknown"
                                             )
@@ -198,23 +198,23 @@ class FaceRecognition():
                     
             val, idx = min((val, idx) for (idx, val) in enumerate(dist))
         except ValueError as exeption:
-            logger.debug(f"***EXCEPTION: {Exception}")
+            LOGGER.debug(f"***EXCEPTION: {Exception}")
             return 10,0
         return val,idx
     
     def _delete_elements_from_list(self, indexes:List[int], list_type: str):
-        # logger.debug(f"indexes to remove {indexes} in {list_type}")
+        # LOGGER.debug(f"indexes to remove {indexes} in {list_type}")
         for i in sorted(list(set(indexes)), reverse=True):
             try:
                 if list_type == "unknown":
                     del self.list_unknown_faces[i]
-                    # logger.debug(f"AFTER_REMOVE : {self.list_unknown_faces}")  
+                    # LOGGER.debug(f"AFTER_REMOVE : {self.list_unknown_faces}")  
                 elif list_type == "known":
                     del self.dict_known_faces[i]
-                    # logger.debug(f"AFTER_REMOVE : {self.dict_known_faces}")
+                    # LOGGER.debug(f"AFTER_REMOVE : {self.dict_known_faces}")
             except IndexError as e:
                 list_of_faces = self.list_unknown_faces if list_type=="unknown" else self.dict_known_faces
-                logger.error(f"ERROR can remove {i} index from {list_of_faces} ")
+                LOGGER.error(f"ERROR can remove {i} index from {list_of_faces} ")
             
     def update_recognized_list(self, id_recognized: str, collectionName:str, biggest: bool, face_bbox = None):
         # delete old faces recognized
@@ -226,7 +226,7 @@ class FaceRecognition():
             
             self._delete_elements_from_list(faces_to_delete, "known")
         except Exception as e:
-            logger.debug(f"Error in {update_recognized_list.__name__}: {e}")
+            LOGGER.debug(f"Error in {update_recognized_list.__name__}: {e}")
 
         if id_recognized in self.dict_known_faces:
             if time.time() - self.dict_known_faces[id_recognized].last_seen < cfg.NULL_TIMEOUT:
@@ -256,7 +256,7 @@ class FaceRecognition():
         
         for i,unknown_face in enumerate(self.list_unknown_faces):
             if (unknown_face.face_vector - recognized_vec).norm().item() < cfg.SIMILARITY_THRESHOLD:
-                logger.debug(f"********************DELETING the Key {i}")
+                LOGGER.debug(f"********************DELETING the Key {i}")
                 keys_to_delete.append(i)
         
         self._delete_elements_from_list(keys_to_delete, 'unknown')
@@ -280,7 +280,7 @@ class FaceRecognition():
                         if self.dict_known_faces[el].frames == cfg.FRAMES_BEFORE_RECOGNITION]
         
         ids_to_publish.extend([id for id in self.last_published_recognized_ids if id not in ids_to_remove])
-        # logger.debug(f"{self.last_published_recognized_ids=} , {ids=} ,  {list(set(ids_to_publish))=}")
+        # LOGGER.debug(f"{self.last_published_recognized_ids=} , {ids=} ,  {list(set(ids_to_publish))=}")
         return list(set(ids_to_publish))
     
     def unrecognized_faces_to_publish(self, unrecognized_ids):
@@ -314,7 +314,7 @@ class FaceRecognition():
         ids_to_publish = []
         unknowns_ids_to_publish = []
         unknowns_indexes_to_publish = []
-        # logger.debug(f"{ids=}  and {unrecognized_ids=} and {len(self.list_unknown_faces)=}")
+        # LOGGER.debug(f"{ids=}  and {unrecognized_ids=} and {len(self.list_unknown_faces)=}")
         
         
         def info_recognized(el):
@@ -325,7 +325,7 @@ class FaceRecognition():
             if True: #cfg.SEND_REC:
                     bbox = self.dict_known_faces[el].bbox
                     bbox_dict = {"x":int(bbox[0]),"y":int(bbox[1]),"w":int(bbox[2]),"h":int(bbox[3]),}
-                    logger.debug(f"{bbox_dict=}")
+                    LOGGER.debug(f"{bbox_dict=}")
                     json_to_publish["posn"] = bbox_dict
             return json_to_publish
         
@@ -342,12 +342,12 @@ class FaceRecognition():
         
         self.msg_published = {"faces":[]}
         
-        # logger.debug(f"{unrecognized_ids=} ,{self.list_unknown_faces=}")
+        # LOGGER.debug(f"{unrecognized_ids=} ,{self.list_unknown_faces=}")
         
         recognized_ids_to_publish = self.recognized_faces_to_publish(ids)
         unknowns_ids_to_publish, unknowns_faces_to_publish = self.unrecognized_faces_to_publish(unrecognized_ids)
-        # logger.debug(f"{recognized_ids_to_publish=}")
-        # logger.debug(f"{unknowns_ids_to_publish=}")
+        # LOGGER.debug(f"{recognized_ids_to_publish=}")
+        # LOGGER.debug(f"{unknowns_ids_to_publish=}")
         
         if (cfg.MSG_SPEED<0  and (self.last_published_recognized_ids != recognized_ids_to_publish or \
             self.last_published_unrecognized_indexes != unknowns_ids_to_publish)) or \
@@ -358,8 +358,8 @@ class FaceRecognition():
             if len(self.msg_published["faces"]) > 1:
                 self.msg_published["faces"] = sorted(self.msg_published["faces"],key=lambda x:x["posn"]["w"]*x["posn"]["h"],reverse=True)
             msg = json.dumps(self.msg_published)
-            logger.debug(f"MESSAGE TO PUBLISH MQTT {msg=} ")
-            logger.debug(f"{self.dict_known_faces=} \n{self.list_unknown_faces=}")
+            LOGGER.debug(f"MESSAGE TO PUBLISH MQTT {msg=} ")
+            LOGGER.debug(f"{self.dict_known_faces=} \n{self.list_unknown_faces=}")
             
             cfg.FACE_CLIENT.publish(
                             cfg.TOPICS_TO_BRAIN["FACE_RECOGNITION"], msg)
@@ -388,7 +388,7 @@ class FaceRecognition():
                     self.update_recognized_list(id_recognized,collectionName,biggest=False, face_bbox=face_bbox)
                     self.check_if_recognized_in_unrecognized(face_embedding)
                 except Exception as e:
-                        logger.debug(f"Error in updating know faces: {e}")
+                        LOGGER.debug(f"Error in updating know faces: {e}")
                         
         return id_recognized, name_recognized, val
     
@@ -425,12 +425,12 @@ class FaceRecognition():
             if id_recognized is not None:
                 indexes_vectors_recognized.append(i)
                 ids.append(id_recognized)
-                names_reco.append(name_recognized) if name_recognized is not None else logger.debug("error name recognized")
-                vals.append(val) if val is not None else logger.debug("error val")
+                names_reco.append(name_recognized) if name_recognized is not None else LOGGER.debug("error name recognized")
+                vals.append(val) if val is not None else LOGGER.debug("error val")
         if ids:
                 cond = [self.dict_known_faces[id].frames<= cfg.FRAMES_BEFORE_RECOGNITION or (self.dict_known_faces[id].frames> cfg.FRAMES_BEFORE_RECOGNITION and self.dict_known_faces[id].frames % 20 == 0) for id in ids ]
                 if any(cond):
-                    logger.debug(f"names in the frame: {[(name,self.dict_known_faces[id].frames) for name,id in zip(names_reco, ids)]} with similarity= {[round(val,2) for val in vals]}")
+                    LOGGER.debug(f"names in the frame: {[(name,self.dict_known_faces[id].frames) for name,id in zip(names_reco, ids)]} with similarity= {[round(val,2) for val in vals]}")
                 self.check_biggest(ids)
                 
         # delete face vectors that has been recognized
@@ -450,11 +450,11 @@ class FaceRecognition():
         try:
             self.publish_mqtt(ids, unreco_ids)
         except KeyError as e:
-            logger.debug(f"Error in publish_mqtt: {e}")
-            logger.debug(f"dict known faces: {self.dict_known_faces}")
+            LOGGER.debug(f"Error in publish_mqtt: {e}")
+            LOGGER.debug(f"dict known faces: {self.dict_known_faces}")
             
         
         # if self.published and (time.time() - self.face_timeout) >= cfg.NULL_TIMEOUT:
-        #     logger.debug("PUBLISH EMPTY HERE")
+        #     LOGGER.debug("PUBLISH EMPTY HERE")
         #     cfg.FACE_CLIENT.publish(cfg.TOPICS_TO_BRAIN["FACE_RECOGNITION"],json.dumps({"face":[]}))
         #     self.initialize_params(collectionNames=cfg.COLLECTION)
