@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 
 from img_xtend.pose_estimation import keypoints
-from img_xtend.settings import config as cfg
+from img_xtend.pipelines.face_recognition.configuration import config as cfg
 
 # def get_face_crop(img,x,y,h,w):
 #     face_crop = (x,y, x+w, y+h)
@@ -31,21 +31,23 @@ from img_xtend.settings import config as cfg
 #     return True
 
 
-def get_faces_from_poses(pose_results,img):
-    faces = []
-    keypoints_result = pose_results[0].keypoints if  hasattr(pose_results[0],'keypoints') else None
+def get_face_from_pose(pose_results,img):
+    keypoints_result = pose_results.keypoints if  hasattr(pose_results,'keypoints') else None
     if keypoints_result is None:
         raise IndexError("No keypoints in the results")
+    face_all_data = {}
     for keypoint in keypoints_result:
         nose = keypoints.check_nose(keypoint)
         eyes = keypoints.check_eyes(keypoint)
-        if nose in None or eyes is None:
+        if nose is None or eyes is None:
             continue
         x, y, w, h = find_face(nose, eyes[0], eyes[1], img.shape )
         if h <= 0 or w <= 0:
                 continue
-        faces.append(img[x:x+w,y:y+h])
-    return faces
+        face = img[x:x+w,y:y+h]
+        face_all_data["face"] = face        
+        face_all_data["posn"] = [x+w//2,y+h//2,w,h]
+    return face_all_data
 
 def find_face(nose,left_eye,right_eye,img_shape):
     """The function find a bounding box of the face
@@ -59,39 +61,42 @@ def find_face(nose,left_eye,right_eye,img_shape):
     Returns:
         [type]: [description]
     """
+    left_eye = left_eye.numpy()
+    right_eye = right_eye.numpy()
+    nose = nose.numpy()
     
-    dist_eye_x  = left_eye.x - right_eye.x
-    dist_eye_y  = left_eye.y - right_eye.y
+    dist_eye_x  = left_eye[0] - right_eye[0]
+    dist_eye_y  = left_eye[1] - right_eye[1]
     
     if dist_eye_x == 0:
         dist_eye_x = 20
 
     slope_eye = dist_eye_y/dist_eye_x
-    b_left = left_eye.y - slope_eye*left_eye.x
-    b_right = left_eye.y - slope_eye*right_eye.x
+    b_left = left_eye[1] - slope_eye*left_eye[0]
+    b_right = left_eye[1] - slope_eye*right_eye[0]
 
     hypo = np.sqrt(dist_eye_x**2 + dist_eye_y**2)
 
     proportion = 2
-    x_left_new = left_eye.x - proportion*dist_eye_x
-    y_left_new = left_eye.y - proportion*dist_eye_y
+    x_left_new = left_eye[0] - proportion*dist_eye_x
+    y_left_new = left_eye[1] - proportion*dist_eye_y
 
-    x_right_new = right_eye.x + proportion*dist_eye_x
-    y_right_new = right_eye.y + proportion*dist_eye_y
+    x_right_new = right_eye[0] + proportion*dist_eye_x
+    y_right_new = right_eye[1] + proportion*dist_eye_y
 
     x_final = np.max((0,np.round(x_left_new).astype(int)))
 
     width = np.min((img_shape[1]-x_final-1, np.round(x_right_new - x_left_new).astype(int)))
 
-    x_m = right_eye.x + 0.5*dist_eye_x
-    y_m = right_eye.y + 0.5*dist_eye_y
+    x_m = right_eye[0] + 0.5*dist_eye_x
+    y_m = right_eye[1] + 0.5*dist_eye_y
 
-    dist_nose_x = nose.x - x_m
-    dist_nose_y = nose.y - y_m
+    dist_nose_x = nose[0] - x_m
+    dist_nose_y = nose[1] - y_m
 
     proportion2 = 4
-    x_high_new = nose.x - proportion2*dist_nose_x
-    y_high_new = nose.y - proportion2*dist_nose_y
+    x_high_new = nose[0] - proportion2*dist_nose_x
+    y_high_new = nose[1] - proportion2*dist_nose_y
 
     x_down_new = x_m + (proportion2)*dist_nose_x
     y_down_new = y_m + proportion2*dist_nose_y

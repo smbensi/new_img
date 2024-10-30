@@ -47,7 +47,7 @@ class ResNetModel:
                 output = self.get_embedding_local(self.transform(x))
                 outputs.append(output)
         # FIXME  consistent output  numpy array / torch tensor
-        return outputs
+        return outputs if len(outputs) > 1 else outputs[0]
 
     def transform(self, input:np.ndarray):
         input = cv2.resize(input, (160,160)) # to be adapted to our Resnet

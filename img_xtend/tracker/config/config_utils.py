@@ -3,6 +3,8 @@ import os
 import yaml
 from collections import namedtuple
 
+from img_xtend.utils import ROOT
+
 def get_config(tracker_type, config_file):
     assert os.path.isfile(config_file)
  
@@ -17,5 +19,5 @@ def to_obj(tracker_type, dict):
     return namedtuple_config(**dict)
 
 
-weights_path = 'img_xtend/tracking/weights'
-config_path = 'img_xtend/tracking/config/config.yaml'
+weights_path = f'{ROOT}/tracker/weights'
+config_path = f'{ROOT}/tracker/config/config.yaml'

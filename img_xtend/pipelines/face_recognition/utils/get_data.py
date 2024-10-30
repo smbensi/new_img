@@ -84,4 +84,16 @@ def get_data_from_json(json_file):
     embeddings.append(np.array(file["faceVector"]).astype(np.float64))
     logger.debug(f"** NAMES IN DB *** {names}")
     embeddings = np.array(embeddings).reshape((-1,512),order='C')
-    return ids,names, embeddings
+    collections = ["user"]*len(names)
+    
+    json_db = {
+                MAPPING.ID.value: ids,
+                MAPPING.COLLECTION.value: collections,
+                MAPPING.NAME.value: names,
+                MAPPING.FACE_VECTORS.value: list(embeddings)
+                
+            }
+    df = pd.DataFrame(json_db)
+    cfg.ALL_FACE_VECTORS = df
+    
+    return df

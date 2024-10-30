@@ -48,9 +48,7 @@ class FaceRecognition():
         if source == "DB":
             self.faces_df = get_data_from_db()
         elif source=="JSON":
-            # self.ids, self.names, self.face_vectors = get_data_from_json(f"{ROOT}/{os.environ['JSON_FILE']}")
-            self.ids, self.names, self.face_vectors = get_data_from_json(f"{ROOT_PARENT}/shared/Jakes_photos/1234.json")
-            self.collections = ["user"]*len(self.names)
+            self.faces_df = get_data_from_json(f"{ROOT_PARENT}/shared/Jakes_photos/1234.json")
         else: 
             pass
         LOGGER.debug("*** DATA UPDATED ***")
@@ -133,7 +131,8 @@ class FaceRecognition():
         else:
             dists_from_unknown_faces = []
             for i,elem in enumerate(self.list_unknown_faces):
-                dist = (face_vector - elem.face_vector).norm().item()
+                # dist = (face_vector - elem.face_vector).norm().item()
+                dist = np.linalg.norm(face_vector - elem.face_vector)
                 dists_from_unknown_faces.append(dist)
                 
                 if dist < debug_min_dist:
@@ -189,7 +188,8 @@ class FaceRecognition():
         return [self.list_unknown_faces[unreco_ids[0]].index] if len(unreco_ids)>0 else unreco_ids       
                      
     def get_minimum_distance(self,face_vec):
-        face_vec = face_vec.numpy()
+        if not isinstance(face_vec, np.ndarray):
+            face_vec = face_vec.numpy()
         try:
             dist = [min(np.linalg.norm((np.array(row[MAPPING.FACE_VECTORS.value],dtype=np.float64) - face_vec),
                                axis=1))
@@ -329,17 +329,6 @@ class FaceRecognition():
                     json_to_publish["posn"] = bbox_dict
             return json_to_publish
         
-        # def info_unrecognized(el):
-        #     json_to_publish = {}
-        #     id_to_publish =  self.list_unknown_faces[el].index
-        #     json_to_publish["unknownId"] = id_to_publish
-            
-        #     if cfg.SEND_REC:
-        #         bbox = self.list_unknown_faces[el].bbox
-        #         bbox_dict = {"x":int(bbox[0]),"y":int(bbox[1]),"w":int(bbox[2]),"h":int(bbox[3]),}
-        #         json_to_publish["posn"] = bbox_dict
-        #     return json_to_publish
-        
         self.msg_published = {"faces":[]}
         
         # LOGGER.debug(f"{unrecognized_ids=} ,{self.list_unknown_faces=}")
@@ -409,9 +398,16 @@ class FaceRecognition():
         Args:
             img (_type_): _description_
         """
-        
-        
-        face_vecs_in_frame = self.get_face_vectors(img)
+        face_vecs_in_frame = []
+        for pose_result in pose_estimation_results:
+            from img_xtend.pipelines.face_recognition.utils.find_face import get_face_from_pose
+            face_info = get_face_from_pose(pose_result, img)
+            if "face" in face_info:
+                face_info["face_embedding"] = self.recognition_model(face_info["face"])
+            else:
+                continue        
+            face_vecs_in_frame.append(face_info)
+        # face_vecs_in_frame = self.get_face_vectors(img)
         ids = []
         names_reco = []
         vals = []
