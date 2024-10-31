@@ -22,6 +22,7 @@ recognition = FaceRecognition()
 
 source = "0"
 # source = f"{ROOT_PARENT}/shared/Jakes_photos/20230724_112512.jpg"
+source = "/home/nvidia/dev/img_new/scripts/img_mat.jpg"
 dataset = load_inference_source(source)  # load the source of images
 
 RUN_TRACKING=False
