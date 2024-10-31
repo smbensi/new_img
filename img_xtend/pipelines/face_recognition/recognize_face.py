@@ -5,6 +5,7 @@ import json
 
 import numpy as np
 import pandas as pd
+import cv2
 
 from img_xtend.utils import LOGGER, ROOT_PARENT
 from img_xtend.pipelines.face_recognition.utils.get_data import (
@@ -349,8 +350,8 @@ class FaceRecognition():
             msg = json.dumps(self.msg_published)
             LOGGER.debug(f"MESSAGE TO PUBLISH MQTT {msg=} ")
             LOGGER.debug(f"{self.dict_known_faces=} \n{self.list_unknown_faces=}")
-            
-            cfg.FACE_CLIENT.publish(
+            if cfg.FACE_CLIENT is not None:
+                cfg.FACE_CLIENT.publish(
                             cfg.TOPICS_TO_BRAIN["FACE_RECOGNITION"], msg)
                 
             self.last_time_published = time.time()  
@@ -401,8 +402,12 @@ class FaceRecognition():
         face_vecs_in_frame = []
         for pose_result in pose_estimation_results:
             from img_xtend.pipelines.face_recognition.utils.find_face import get_face_from_pose
+            from img_xtend.pipelines.face_recognition.utils.visualization import show_pose
+            img_with_pose = show_pose(img, pose_result)
+            cv2.imwrite(f'img.jpg',img_with_pose)
             face_info = get_face_from_pose(pose_result, img)
             if "face" in face_info:
+                cv2.imwrite(f'face.jpg',face_info["face"])
                 face_info["face_embedding"] = self.recognition_model(face_info["face"])
             else:
                 continue        

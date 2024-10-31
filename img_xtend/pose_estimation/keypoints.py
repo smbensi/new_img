@@ -90,14 +90,14 @@ BODY_JOINT={0: "Nose",
 def check_nose(keypoint):
     """return the xy coordinate if the nose is in the image o.w None"""
     if keypoint.conf[0,0] > 0.5:
-        return keypoint.xy[0,0,:]
+        return keypoint.xy[0,0,:].int()
     else:
         return None
 
 def check_eyes(keypoint):
     # 1: Left Eye 2: Right Eye 
     if keypoint.conf[0,1] > 0.5 and keypoint.conf[0,2] > 0.5:
-        return torch.cat([keypoint.xy[0,1,:].unsqueeze(0),keypoint.xy[0,2,:].unsqueeze(0)], dim=0)
+        return torch.cat([keypoint.xy[0,1,:].unsqueeze(0),keypoint.xy[0,2,:].unsqueeze(0)], dim=0).int()
     else:
         return None
 
