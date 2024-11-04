@@ -74,6 +74,8 @@ xyn: tensor([[[0.4257, 0.5353],
          [0.0000, 0.0000]]])
 
 '''
+from typing import Union
+
 import torch
 
 BODY_JOINT={0: "Nose", 
@@ -87,28 +89,29 @@ BODY_JOINT={0: "Nose",
 15: "Left Ankle",       16: "Right Ankle",
 }
 
-def check_nose(keypoint):
+def check_nose(keypoint) -> Union[torch.Tensor,None]:
     """return the xy coordinate if the nose is in the image o.w None"""
     if keypoint.conf[0,0] > 0.5:
         return keypoint.xy[0,0,:].int()
     else:
         return None
 
-def check_eyes(keypoint):
+def check_eyes(keypoint) -> Union[torch.Tensor,None]:
     # 1: Left Eye 2: Right Eye 
     if keypoint.conf[0,1] > 0.5 and keypoint.conf[0,2] > 0.5:
         return torch.cat([keypoint.xy[0,1,:].unsqueeze(0),keypoint.xy[0,2,:].unsqueeze(0)], dim=0).int()
     else:
         return None
 
-def check_shoulders(keypoint):
+def check_shoulders(keypoint) -> Union[torch.Tensor,None]:
     # 5: Left Shoulder 6: Right Shoulder 
     if keypoint.conf[0,5] > 0.7 and keypoint.conf[0,6] > 0.7:
         return torch.cat([keypoint.xy[0,5,:].unsqueeze(0),keypoint.xy[0,6,:].unsqueeze(0)], dim=0)
     else:
         return None
     
-def check_ears(keypoint):
+def check_ears(keypoint) -> Union[torch.Tensor,None]:
+    """3: "Left Ear",          4: "Right Ear" """
     if keypoint.conf[0,3] > 0.5 and keypoint.conf[0,4] > 0.5:
         return torch.cat([keypoint.xy[0,3,:].unsqueeze(0),keypoint.xy[0,4,:].unsqueeze(0)], dim=0)
     else:

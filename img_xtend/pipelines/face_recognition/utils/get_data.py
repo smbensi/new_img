@@ -7,8 +7,9 @@ from enum import Enum
 import numpy as np
 import pandas as pd
 
-from Database import UsersCollection as UC
-from Database import FaceVectorsCollection as FVC
+# from Database import UsersCollection as UC
+# from Database import FaceVectorsCollection as FVC
+from img_xtend.database import FaceVectorsCollection as FVC
 
 from img_xtend.pipelines.face_recognition.configuration import config as cfg
 from img_xtend.utils import LOGGER as logger
@@ -24,14 +25,6 @@ def get_data_from_db() -> Tuple[List[str],List[str],List[np.ndarray],List[str]]:
     tmp = FVC.FaceVectorsCollection()
     face_emb = tmp.GetFaceVectors()
     
-    names = []
-    ids = []
-    collections = []
-    names_and_vec = {}
-    names_and_ids = {}
-    # embeddings = []
-    np_emb = np.empty((1,512))
-    
     df = pd.json_normalize(face_emb)
     cfg.ALL_FACE_VECTORS = df
     logger.debug(df)
@@ -40,26 +33,6 @@ def get_data_from_db() -> Tuple[List[str],List[str],List[np.ndarray],List[str]]:
     if os.getenv("DEBUGGING",False)=="True":
         df_to_file = df.to_pickle('/code/shared/db.pkl')
     return df
-    
-    # for face in face_emb:
-    #     for i in enumerate(face[MAPPING.FACE_VECTORS.value]):
-    #         ids.append(face.get(MAPPING.ID.value,"no ID"))
-    #         names.append(face.get(MAPPING.NAME.value,"no name"))
-    #         collections.append(face.get(MAPPING.COLLECTION.value,"no collection"))
-            
-    #     vecs = np.array(face[MAPPING.FACE_VECTORS.value]).astype(np.float64)
-    #     if vecs.shape[0] == 0:
-    #         continue
-        
-    #     np_emb = np.concatenate((np_emb,vecs),axis=0)
-        
-    #     names_and_vec[face[MAPPING.NAME.value]]=len(face[MAPPING.FACE_VECTORS.value])
-    #     names_and_ids[face[MAPPING.NAME.value]]= face.get(MAPPING.ID.value,"no ID")
-    
-    # logger.info(f"** NAMES AND NB OF VECTORS IN DB *** {names_and_vec}")
-    # logger.info(f"** NAMES AND CORRESPONDING ID *** {names_and_ids}")
-    # embeddings = np_emb[1:]
-    # return ids,names, embeddings, collections
 
 def filter_face_vecs(column:str=MAPPING.COLLECTION.value,
                      values:List[str]=None)-> pd.DataFrame:

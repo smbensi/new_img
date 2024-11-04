@@ -1,10 +1,12 @@
+from copy import deepcopy
+
 import torch 
 import cv2
 
 from img_xtend.pose_estimation.keypoints import *
 
 def show_pose(img, pose_result):
-    
+    img_new = deepcopy(img)
     # Define the color (BGR format) and radius of the point
     color = (0, 0, 255)  # Red color in BGR format
     radius = 5  # Radius of the circle (point size)
@@ -22,5 +24,5 @@ def show_pose(img, pose_result):
         points.append((nose[0].item(), nose[1].item()))
         
     for point in points:
-        cv2.circle(img, point, radius, color, thickness)
-    return img
+        cv2.circle(img_new, point, radius, color, thickness)
+    return img_new
