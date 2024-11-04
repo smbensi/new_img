@@ -1,0 +1,30 @@
+version: '3.9'
+
+services:
+
+
+  triton:
+      image: 868948754431.dkr.ecr.eu-central-1.amazonaws.com/kiosk/tritonserver:latest
+      command: ["tritonserver",
+      #"--model-repository=/stt_model_repository",
+                  # "--model-repository=/tts_model_repository",
+      #"--model-repository=/ocr_model_repository",
+                  # "--model-repository=/object_detection_model_repository",
+                  "--model-repository=/recognition_model_repository",
+                  "--disable-auto-complete-config"   # see why we need it https://github.com/triton-inference-server/server/issues/6165
+                  ]
+      runtime: nvidia
+      network_mode: "host"
+      volumes:
+        - /home/nvidia/xtend/shared/ml-artifacts/tts_model_repository:/tts_model_repository
+        # - /home/nvidia/xtend/shared/ml-artifacts/stt_model_repository:/stt_model_repository
+        # - /home/nvidia/xtend/shared/ml-artifacts/card_reader_model_repository_1_0:/ocr_model_repository
+        - /home/nvidia/xtend/shared/ml-artifacts/object_detection:/object_detection_model_repository
+        - /home/nvidia/xtend/shared/ml-artifacts/recognition:/recognition_model_repository
+
+      healthcheck:
+        test: ["CMD-SHELL", "curl localhost:8000"]
+        interval: 2s
+        timeout: 1s
+        retries: 20
+        start_period: 0s
