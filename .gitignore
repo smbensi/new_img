@@ -4,3 +4,6 @@ img_xtend/models/*
 __pycache__
 Database
 shared
+models_weights
+*.npy
+*.pth
