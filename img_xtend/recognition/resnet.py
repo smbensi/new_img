@@ -111,8 +111,11 @@ class ResNetModel:
 if __name__=="__main__":
     a = ResNetModel()
 
-    img = cv2.imread("Jake/2022-01-23-180541_1.jpg")
+    img = cv2.imread("/home/nvidia/dev/img_new/scripts/face_jake.jpg")
+    img = np.ones((160,160,3))
     print(img.dtype)
     print(img.shape)
     output = a(img)
+    np.save('/home/nvidia/dev/img_new/scripts/ones_triton.npy', output)
+
     print(f'{output[0].shape = }')
