@@ -7,3 +7,5 @@ shared
 models_weights
 *.npy
 *.pth
+face.jpg
+img.jpg
