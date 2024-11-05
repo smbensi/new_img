@@ -7,7 +7,7 @@ import numpy as np
 import cv2
 from ultralytics import YOLO
 
-from img_xtend.utils import LOGGER, is_docker
+from img_xtend.utils import LOGGER, is_docker, ROOT_PARENT
 from img_xtend.settings.integration_stg import *
 from .bbox import Bbox
 
@@ -16,13 +16,14 @@ class YoloV8:
     
     def __init__(self, pose:bool=False):
         start = time.time()
-        model_folder = "/code/models" if is_docker() else f'{os.getcwd()}/img_xtend/models/ultralytics'
+        model_folder = "/code/models" if is_docker() else f'{ROOT_PARENT}/models/pose_estimation'
         if pose:
             model_name = "yolov8n-pose.pt"
             model_path = f'{model_folder}/{model_name}'
 
         else:
             if USE_TRITON:
+                print("****DETECTION MODEL FROM TRITON****")
                 LOGGER.debug("****DETECTION MODEL FROM TRITON****")
                 model_path = f'http://localhost:8000/ultralytics'
             else:

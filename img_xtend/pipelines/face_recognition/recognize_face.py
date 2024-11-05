@@ -369,6 +369,7 @@ class FaceRecognition():
         
         if len(self.faces_df) > 0:
             val,idx = self.get_minimum_distance(face_embedding)
+            print(f"{val=} and person {self.faces_df.name.iloc[idx]}")
             if val < cfg.SIMILARITY_THRESHOLD:
                 try:
                     id_recognized = self.faces_df[MAPPING.ID.value].iloc[idx]
