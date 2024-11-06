@@ -41,7 +41,8 @@ class ResNetModel:
         outputs = []
         for x in [inputs]:
             if USE_TRITON:
-                output = self.model(self.transform(x))
+                input_resnet = self.transform(x)
+                output = self.model(input_resnet)
                 outputs.append(output[0])
             else:
                 output = self.get_embedding_local(self.transform(x))
@@ -50,9 +51,12 @@ class ResNetModel:
         return outputs if len(outputs) > 1 else outputs[0]
 
     def transform(self, input:np.ndarray):
+        # print(f"{input.shape}")
         input = cv2.resize(input, (160,160)) # to be adapted to our Resnet
-        input = np.transpose(input, (2,0,1))
-        input = np.expand_dims(input, axis=0).astype(np.float32)
+        input = (input-127.5)/128
+        input = np.transpose(input, (2,0,1)).astype(np.float32)
+        # input = np.expand_dims(input, axis=0).astype(np.float32)
+        # input = np.ones((3,160,160),dtype=np.float32)
         return input
     
     def load_local_model(self):  # TODO check that these 2 functions work 

@@ -41,7 +41,7 @@ def get_face_from_pose(pose_results,img):
         eyes = keypoints.check_eyes(keypoint)
         if nose is None or eyes is None:
             continue
-        x, y, w, h = find_face(nose, eyes[0], eyes[1], img.shape )
+        x, y, h, w = find_face(nose, eyes[0], eyes[1], img.shape )
         if h <= 0 or w <= 0:
                 continue
         face = img[y:y+h,x:x+w]
@@ -66,15 +66,12 @@ def find_face(nose,left_eye,right_eye,img_shape):
     nose = nose.numpy()
     
     dist_eye_x  = left_eye[0] - right_eye[0]
-    print(f"{dist_eye_x=}")
     dist_eye_y  = left_eye[1] - right_eye[1]
-    print(f"{dist_eye_y=}")
     
     if dist_eye_x == 0:
         dist_eye_x = 20
 
     slope_eye = dist_eye_y/dist_eye_x
-    print(f"{slope_eye=}")
     
     b_left = left_eye[1] - slope_eye*left_eye[0]
     b_right = left_eye[1] - slope_eye*right_eye[0]
