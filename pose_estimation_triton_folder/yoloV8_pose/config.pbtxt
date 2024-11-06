@@ -1,0 +1,20 @@
+name: "yoloV8_pose"
+platform: "onnxruntime_onnx"
+max_batch_size : 0
+
+input {
+  name: "images"
+  data_type: TYPE_FP32
+  dims: 1
+  dims: 3
+  dims: 640
+  dims: 640
+}
+
+output {
+  name: "output0"
+  data_type: TYPE_FP32
+  dims: 1
+  dims: 56
+  dims: 8400
+}
