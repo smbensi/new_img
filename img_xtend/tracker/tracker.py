@@ -12,7 +12,7 @@ from img_xtend.tracker.check_embedding import add_new_detection
 from img_xtend.tracker.track import Track
 from img_xtend.tracker import tracker_settings
 from img_xtend.pose_estimation import keypoints
-from img_xtend.pipelines.follow_person import integration_settings
+from img_xtend.pipelines.follow_person import follow_settings
 class Tracker:
     
     def __init__(
@@ -113,11 +113,11 @@ class Tracker:
         for track_idx, bbox_idx in matches:
             add_embedding = False   
             if self.tracks[track_idx].is_followed:
-                integration_settings.MATCHES_SOURCE[matches_from] += 1
-                integration_settings.MATCHES_SOURCE["FRAMES"] += 1
+                follow_settings.MATCHES_SOURCE[matches_from] += 1
+                follow_settings.MATCHES_SOURCE["FRAMES"] += 1
                 add_embedding = add_new_detection(matches_from, cost_matrix_log, bboxes, *match_data.index_in_cost_matrix)
                 LOGGER.debug(f"{matches_from=} {cost_matrix_log=} {add_embedding=}")
-                if matches_from != self.last_matches_from and matches_from in integration_settings.MATCHES_TO_PRINT:
+                if matches_from != self.last_matches_from and matches_from in follow_settings.MATCHES_TO_PRINT:
                     # LOGGER.debug(f"match from: {logs_matches_from}")
                     self.last_matches_from = matches_from
                         
@@ -252,7 +252,7 @@ class Tracker:
                     {iou_tracks_candidates=}, {bboxes=} \n \
                     track_idx{[i for i,_ in matches_iou]} and tracks={self.tracks[:3]} \n \
                     cost appearance in IOU match {appearance_cost} \n\n"
-                log_to_file(integration_settings.IOU_LOGS, sentence_to_log)
+                log_to_file(follow_settings.IOU_LOGS, sentence_to_log)
         
         match_data = MatchData(match_from=MATCHES,
                                cost_matrix= logs_data_appearance.get("cost_matrix_log",[]),

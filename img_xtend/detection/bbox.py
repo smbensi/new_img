@@ -54,7 +54,7 @@ class Bbox:
             return self.xyxy
             
     def __repr__(self):
-        return f'Bbox: id={self.id}, x={self.x}, y={self.y}, w={self.w}, h={self.h}, xyxy={self.xyxy} '
+        return f'Bbox: id={self.id}, cls={self.cls}, x={self.x}, y={self.y}, w={self.w}, h={self.h}, xyxy={self.xyxy} '
 
 
 def to_tlbr(bbox:Bbox):

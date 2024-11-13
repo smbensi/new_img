@@ -7,7 +7,7 @@ from img_xtend.utils import LOGGER, get_time, log_to_file
 from img_xtend.detection.bbox import Bbox
 from img_xtend.pose_estimation import keypoints
 from img_xtend.tracker import tracker_settings
-from img_xtend.pipelines.follow_person import integration_settings
+from img_xtend.pipelines.follow_person import follow_settings
 
 
 class TrackState:
@@ -193,14 +193,14 @@ in_frame={self.in_frame}]\n"
                     
                 sentence_to_log = f"\n{get_time()}: {matches_from}: new features to followed ID_{self.id}  hits= {self.hits} similarity with {self.similarity_detection[int(similarity_index)]} and similiraty_val={similarity_val:.3f}"
                 
-                log_to_file(integration_settings.NEW_DETECTION_INFO_FILE,f"{sentence_to_log} \n")
+                log_to_file(follow_settings.NEW_DETECTION_INFO_FILE,f"{sentence_to_log} \n")
                 if matches_from in ['IOU']:
-                    log_to_file(integration_settings.NEW_DETECTION_INFO_FILE,
+                    log_to_file(follow_settings.NEW_DETECTION_INFO_FILE,
                                 f"appearance_cost: {match_data.appearance_cost} and bboxes: {match_data.bboxes} \n")
                     
                 # LOGGER.debug(sentence_to_log)
                 
-                log_to_file(integration_settings.NEW_DETECTION_INFO_FILE,f"hits and positions={[(i,j, k) for i,j,k in zip(self.similarity_detection, self.features_state, self.detection_from)]} \n ")
+                log_to_file(follow_settings.NEW_DETECTION_INFO_FILE,f"hits and positions={[(i,j, k) for i,j,k in zip(self.similarity_detection, self.features_state, self.detection_from)]} \n ")
                 
                 added = False
                 if len(self.features) > tracker_settings.NB_OF_FEATURES_VECTORS:

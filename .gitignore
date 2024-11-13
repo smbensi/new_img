@@ -9,3 +9,6 @@ models_weights
 *.pth
 face.jpg
 img.jpg
+*.trt
+*.onnx
+*.pt

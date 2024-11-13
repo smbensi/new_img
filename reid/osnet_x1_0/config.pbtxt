@@ -1,0 +1,19 @@
+name: "osnet_x1_0"
+platform: "onnxruntime_onnx"
+max_batch_size : 0
+
+input {
+  name: "input"
+  data_type: TYPE_FP16
+  dims: 1
+  dims: 3
+  dims: 256
+  dims: 128
+}
+
+output {
+  name: "embedding"
+  data_type: TYPE_FP16
+  dims: -1
+  dims: 512
+}

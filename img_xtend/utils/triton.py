@@ -66,7 +66,7 @@ class TritonRemoteModel:
         self.output_names = [x["name"] for x in config["output"]]
         
     
-    def __call__(self, *inputs: np.ndarray) -> List[np.ndarray]:
+    def forward(self, *inputs: np.ndarray) -> List[np.ndarray]:
         """
         Call the model with the given inputs
 
@@ -89,3 +89,6 @@ class TritonRemoteModel:
         outputs = self.triton_client.infer(model_name=self.endpoint, inputs=infer_inputs, outputs=infer_outputs)
         
         return [outputs.as_numpy(output_name).astype(input_format) for output_name in self.output_names]
+
+    def __call__(self, *inputs: np.ndarray):
+        self.forward(*inputs)

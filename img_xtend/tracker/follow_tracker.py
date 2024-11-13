@@ -20,7 +20,7 @@ from img_xtend.tracker.matching.match_dataclass import MatchData
 from img_xtend.tracker.matching.metrics_matching import NearestNeighborDistanceMetric
 from img_xtend.detection.bbox import Bbox
 from img_xtend.pose_estimation import keypoints
-from img_xtend.pipelines.follow_person import integration_settings
+from img_xtend.pipelines.follow_person import follow_settings
 THRESHOLD_SHOULDERS = 100 # in pixels
 
 
@@ -58,7 +58,7 @@ def mqtt_for_rock(bboxes:Bbox,track=False,for_debug=False,id_followed=-1):
     debug_cls = []
     for i,bbox in enumerate(bboxes):
         cls = bbox.cls
-        cls = integration_settings.ULTRALYTICS_LABELS[cls]
+        cls = follow_settings.ULTRALYTICS_LABELS[cls]
         id = bbox.id
         if id == id_followed:
             continue
@@ -74,9 +74,9 @@ def mqtt_for_rock(bboxes:Bbox,track=False,for_debug=False,id_followed=-1):
     msg = {
         "obj_found":mqtt_msg
     }
-    if integration_settings.DEBUG_LAST_CLS_PUBLISHED != debug_cls:
+    if follow_settings.DEBUG_LAST_CLS_PUBLISHED != debug_cls:
         LOGGER.debug(msg)
-    integration_settings.DEBUG_LAST_CLS_PUBLISHED = debug_cls
+    follow_settings.DEBUG_LAST_CLS_PUBLISHED = debug_cls
     return msg
 
 
@@ -168,7 +168,7 @@ class FollowTracker(BaseTracker):
         super().__init__()
         tracker_type = tracker_settings.tracker_name
         cfg = get_config(tracker_type, config_path)
-        LOGGER.debug(f"{integration_settings.MATCHES_TO_PRINT=}")
+        LOGGER.debug(f"{follow_settings.MATCHES_TO_PRINT=}")
         LOGGER.debug(f"\n")
         LOGGER.debug(f"CONFIG TRACKER: {config_path=} {cfg}")
         LOGGER.debug(f"\n")
@@ -323,7 +323,7 @@ class FollowTracker(BaseTracker):
                            "h":int(self.bbox.h)}
             obj_found.append(obj)
         self.msg["obj_found"] = obj_found
-        if integration_settings.SHOW_YOLO_DETECTION:
+        if follow_settings.SHOW_YOLO_DETECTION:
             self.msg["debug"] = mqtt_for_rock(bboxes,track=True,for_debug=True,id_followed=self.followed_track_id)
         
     def check_same_ids(self, tracks):
@@ -338,7 +338,7 @@ class FollowTracker(BaseTracker):
                 self.save_image(img,track)
     
     def save_image(self, img, track):
-        folder_path = integration_settings.DETECTIONS_FOLDER_PATH
+        folder_path = follow_settings.DETECTIONS_FOLDER_PATH
         if self.frames_saved == 0:
             if os.path.exists(folder_path):
                 # Loop through the files in the directory and delete each file

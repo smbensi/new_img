@@ -11,16 +11,7 @@ USE_TRITON = True   #TODO add  to the config
 class ResNetModel: 
     def __init__(
         self,
-        similarity_tresh=0.75,
-        new_person_thresh=1.25,
         ):
-        
-        self.similarity_thresh = similarity_tresh
-        self.new_person_thresh = new_person_thresh
-        
-        self.recognized_faces = []
-        self.unrecognized_faces = []
-        
         if USE_TRITON:
             self.path = 'http://localhost:8000/resnet'
             try:
@@ -105,9 +96,7 @@ class ResNetModel:
 
         embedding = torch.from_numpy(output_buffer)
         return embedding
-    
-    def update(self, img):
-        pass
+
     
 
 
