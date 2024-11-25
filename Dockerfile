@@ -9,8 +9,8 @@ RUN python3 -m pip install --upgrade pip wheel
 RUN mkdir /code
 WORKDIR /code
 
-COPY gevent-24.2.1-cp38-cp38-linux_aarch64.whl /code/gevent-24.2.1-cp38-cp38-linux_aarch64.whl
-RUN pip install gevent-24.2.1-cp38-cp38-linux_aarch64.whl
+# COPY gevent-24.2.1-cp38-cp38-linux_aarch64.whl /code/gevent-24.2.1-cp38-cp38-linux_aarch64.whl
+# RUN pip install gevent-24.2.1-cp38-cp38-linux_aarch64.whl
 
 
 COPY requirements.txt .
