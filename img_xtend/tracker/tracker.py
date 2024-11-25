@@ -84,6 +84,12 @@ class Tracker:
         '''
         # TODO : consider differently the followed_id        
         # iou_matrix = compute_iou_bboxes(bboxes)
+                
+        # Run matching cascade 
+        matches, unmatched_tracks, unmatched_bbox, match_data = self._match(bboxes)
+        cost_matrix_log = match_data.cost_matrix
+        argmin_matrix = match_data.argmin_matrix
+    
         matches_manual, logs_manual_match = [], ""
         if tracker_settings.USE_MANUAL_MATCH:
             try:
@@ -92,11 +98,6 @@ class Tracker:
                 LOGGER.debug(f"PROBLEM MANUAL MATCH: {e}")
                 matches_manual =[]
                 
-        # Run matching cascade 
-        matches, unmatched_tracks, unmatched_bbox, match_data = self._match(bboxes)
-        cost_matrix_log = match_data.cost_matrix
-        argmin_matrix = match_data.argmin_matrix
-    
         matches_from = match_data.match_from 
         logs_matches_from = matches_from + " " + str(cost_matrix_log)
         
@@ -168,7 +169,7 @@ class Tracker:
         """
         
         def gated_metric(tracks: List[Track], bboxes: List[Bbox], track_indices, bbox_indices):
-            features = np.array([bboxes[i].emb for i in bbox_indices])
+            features = np.array([bboxes[i].emb for i in bbox_indices])  
             # targets = np.array([tracks[i].id for i in track_indices])
             targets = np.array([tracks[i] for i in track_indices])
             # LOGGER.debug(f'TARGETS IN THE FRAME  ARE {targets}')

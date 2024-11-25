@@ -74,6 +74,8 @@ def min_cost_matching(
         return [], track_indices, detection_indices, {}  # Nothing to match.
     try:
         cost_matrix, argmin_matrix = distance_metric(tracks, detections, track_indices, detection_indices)
+        if np.isnan(cost_matrix):
+            print("there is nan in cost matrix")
     except Exception as e:
         LOGGER.debug(f"{e}")
         cost_matrix, argmin_matrix = np.empty((1,1)),np.empty((1,1))

@@ -8,7 +8,7 @@ FILE = Path(__file__).resolve()
 PACKAGE_ROOT = FILE.parents[1]
 WEIGHTS = PACKAGE_ROOT / "tracker"  / "weights"
 
-DEFAULT_CONFIG_FILE = "img_xtend/tracking/config/config.yaml"
+DEFAULT_CONFIG_FILE = PACKAGE_ROOT / "tracker/config/config.yaml"
 CONFIG_FILE = os.getenv("CONFIG_FILE",DEFAULT_CONFIG_FILE)
 USE_MANUAL_MATCH = (os.getenv('USE_MANUAL_MATCH', 'True') == 'True')
 

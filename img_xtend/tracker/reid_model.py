@@ -8,6 +8,7 @@ import torch
 from img_xtend.utils import LOGGER, triton
 from img_xtend.tracker.config.config_utils import weights_path, config_path, get_config
 from img_xtend.tracker.appearance.reid_auto_backend import ReidAutoBackend
+from img_xtend.tracker import tracker_settings
 
 def download_weights(type):
     if not os.path.isdir(weights_path):
@@ -41,8 +42,7 @@ def download_weights(type):
 class ReIDModel():
     def __init__(self) -> None:
         
-        cfg = get_config(tracker_type, config_path)
-        
+        USE_TRITON = True
         if USE_TRITON:
             self.half = False
             path = "http://localhost:8000/osnet_x1_0"
@@ -51,6 +51,7 @@ class ReIDModel():
         else:
             self.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
             tracker_type = tracker_settings.tracker_name
+            cfg = get_config(tracker_type, config_path)
             reid_weights = download_weights(cfg.reid_weights)
 
             rab = ReidAutoBackend(

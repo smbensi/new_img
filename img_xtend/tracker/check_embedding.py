@@ -19,6 +19,7 @@ def are_shoulders_inside(keypoints_results):
     shoulders = keypoints.check_shoulders(keypoints_results)
     if shoulders is None:
         return False
+    return True
 
 def is_in_appearance_interval(cost_matrix_element: float) -> bool:
     if cost_matrix_element > 0.1 and cost_matrix_element < 0.20:
@@ -35,14 +36,14 @@ def add_new_detection(matches_from:str,cost_matrix, bboxes: List[Bbox], track_id
     
     bbox = bboxes[bbox_idx]
     cost_matrix_element = cost_matrix[track_idx, bbox_idx]
-    LOGGER.debug(f"add new detection {matches_from=} {cost_matrix_element=}")
+    # LOGGER.debug(f"add new detection {matches_from=} {cost_matrix_element=}")
     iou_matrix = compute_iou_bboxes(bboxes)
     
     if not check_iou_in_present_frame(iou_matrix, bbox_idx):
         LOGGER.debug("check_iou_in_present_frame")
         return False
     if not are_shoulders_inside(bbox.keypoints):
-        LOGGER.debug("are_shoulders inside")
+        LOGGER.debug("shoulders are not inside")
         return False
     if matches_from in ['APPEARANCE', 'MANUAL']:
         return is_in_appearance_interval(cost_matrix_element)

@@ -52,9 +52,10 @@ OVERLAY = None
 # RECOGNITION PARAMETERS
 #### *************************
 # ENGINE_FILE_RECOGNITION = './img_xtend/models/resnet_19_pers_fp16.trt'
-ENGINE_FILE_RECOGNITION = './img_xtend/models/resnet-fp16-jetpack5_1.trt'
-if os.environ["JETSON_MODEL"] == "orin":
+if os.getenv("JETSON_MODEL","not_orin") == "orin":
     ENGINE_FILE_RECOGNITION = './img_xtend/models/resnet_orin_5_1.trt'
+else:
+    ENGINE_FILE_RECOGNITION = './img_xtend/models/resnet-fp16-jetpack5_1.trt'
 
 # threshold telling if there is a similiraty between 2 faces HYPERPARAMETER 
 # (to be fine-tuned)

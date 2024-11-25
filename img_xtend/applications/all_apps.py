@@ -16,8 +16,8 @@ from img_xtend.pipelines.face_recognition.recognize_face import FaceRecognition
 # Connect to MQTT if needed and send alive
 
 
-RUN_TRACKING=False
-RUN_FACE_RECOGNITION=False
+RUN_TRACKING=True
+RUN_FACE_RECOGNITION=True
 RUN_DETECTION=True
 # Create different object that will load the different models
 if RUN_DETECTION:
@@ -54,8 +54,8 @@ for element in dataset: # return list(self.sources), list(images), [""] * self.b
     if RUN_TRACKING or RUN_FACE_RECOGNITION:
         pose_results = pose_estimation_model.predict(img)
         
-        # if RUN_TRACKING:
-        #     tracking_results = tracker.update(img, pose_results)
+        if RUN_TRACKING:
+            tracking_results = tracker.update(img, pose_results)
         if RUN_FACE_RECOGNITION:
             recognition_results = recognition.update(img, pose_results)
     if RUN_DETECTION:

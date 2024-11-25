@@ -6,29 +6,17 @@ from img_xtend.utils import get_time, is_docker
 
 FILE = Path(__file__)
 ROOT = FILE.parents[2]
-CLASS_FILTER = ''
+CONFIG_FILE = ROOT / "tracker/config/config.yaml"
+
+
 CONFIDENCE=float(os.getenv("CONFIDENCE","0.5"))
-TIME_INTERVAL = float(os.getenv("TIME_INTERVAL","1"))
-SOURCE = os.getenv("SOURCE","/dev/video0")
 RUN_DETECTION = (os.getenv('RUN_DETECTION', 'False') == 'True')
 MODE = os.getenv("MODE","DETECTION")
 INIT_TRACKER = False
 TRACKER = os.getenv('TRACKER', 'STRONG_SORT')
 SHOW_YOLO_DETECTION = (os.getenv('SHOW_YOLO_DETECTION', 'True') == 'True')
 
-if is_docker():
-    path = '/code/shared/ml-artifacts/object_detection/objects.json'
-else:
-    path = '/home/nvidia/dev/nlp/tests/test_data/objects.json'
-    
-with open(path) as f:
-    data = json.load(f)
-list_of_objects = data["objects"]
-ids = [el["_id"] for el in list_of_objects]
-names = [el["name"] for el in list_of_objects]
 
-ULTRALYTICS_LABELS = dict(zip(ids, names))
-inverted_labels = dict(zip(names,ids))
 
 # visualization
 SHOW_RESULTS = int(os.getenv("SHOW_RESULTS", "0"))

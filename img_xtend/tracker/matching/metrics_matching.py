@@ -43,6 +43,7 @@ def _cosine_distance(a, b, data_is_normalized=False):
         contains the squared distance between `a[i]` and `b[j]`.
     """
     if not data_is_normalized:
+        
         a = np.asarray(a) / np.linalg.norm(a, axis=1, keepdims=True)
         b = np.asarray(b) / np.linalg.norm(b, axis=1, keepdims=True)
     return 1.0 - np.dot(a, b.T)
@@ -62,8 +63,13 @@ def _nn_cosine_distance(x, y):
         A vector of length M that contains for each entry in `y` the
         smallest cosine distance to a sample in `x`.
     """
-    x_ = torch.from_numpy(np.asarray(x)).squeeze(1)
-    y_ = torch.from_numpy(np.asarray(y)).squeeze(1)
+    if x[0].shape[0:2] != (1,1):
+        print("problem")
+    if y[0].shape[0:2] != (1,1):
+        print("problem")
+    
+    x_ = torch.from_numpy(np.asarray(x)).squeeze(0,2)
+    y_ = torch.from_numpy(np.asarray(y)).squeeze(0,2)
     distances = _cosine_distance(x_, y_)
     return distances.min(axis=0), distances.argmin(axis=0)
     

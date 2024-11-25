@@ -13,9 +13,9 @@ from img_xtend.pose_estimation import keypoints
 from img_xtend.tracker.config.config_utils import weights_path, config_path, get_config
 from img_xtend.tracker import tracker_settings, tracker
 from img_xtend.tracker.matching.metrics_matching import NearestNeighborDistanceMetric
+from img_xtend.tracker.matching.match_dataclass import MatchData
 
-
-from img_xtend.pipelines.follow_person import follow_settings
+from img_xtend.pipelines.follow_person import follow_settings, utils
 
 class BaseTracker(abc.ABC):
     def __init__(self):
@@ -99,7 +99,7 @@ class FollowTracker(BaseTracker):
         # for debugging
         self.frames_saved = 0
     
-    def update(self, bboxes, img, reinit=False):
+    def update(self, img: np.ndarray, bboxes, reinit=False):
         """
         Before updating the tracker , compute the embedddings of each bbox
         and also compute the IOU between the bboxes
@@ -119,7 +119,8 @@ class FollowTracker(BaseTracker):
         
         for bbox in bboxes:
             self.narrow_bbox(bbox)
-            bbox.emb = self.model.get_features(bbox.xyxy_narrowed(), img)
+            crop = utils.get_crops(bbox.xyxy_narrowed(), img)
+            bbox.emb = self.model.get_features(crop)
         
         tracks, match_data = self.tracker.update(bboxes)    
         
@@ -142,7 +143,7 @@ class FollowTracker(BaseTracker):
     
     def initiate_followed_id(self, bboxes):
         
-        selected_bbox, index = self.choose_id(bboxes)
+        selected_bbox, index = utils.choose_id(bboxes)
         
         if selected_bbox is not None:
             self.following = True
@@ -184,8 +185,8 @@ class FollowTracker(BaseTracker):
                 bbox.narrow_x = torch.abs((shoulders[0,0] + shoulders[1,0])//2).to(torch.int32).item()
                 bbox.narrow_w = torch.abs((shoulders[0,0] - shoulders[1,0])).to(torch.int32).item()
                 
-            if bbox.narrow_w > THRESHOLD_SHOULDERS:
-                bbox.xyxy_narrowed()
+            # if bbox.narrow_w > THRESHOLD_SHOULDERS:
+            #     bbox.xyxy_narrowed()
             # else:
                 # LOGGER.debug("THE SHOULDERS ARE NOT FAR ENOUGH")
     
@@ -203,8 +204,8 @@ class FollowTracker(BaseTracker):
                            "h":int(self.bbox.h)}
             obj_found.append(obj)
         self.msg["obj_found"] = obj_found
-        if follow_settings.SHOW_YOLO_DETECTION:
-            self.msg["debug"] = mqtt_for_rock(bboxes,track=True,for_debug=True,id_followed=self.followed_track_id)
+        # if follow_settings.SHOW_YOLO_DETECTION:
+            # self.msg["debug"] = mqtt_for_rock(bboxes,track=True,for_debug=True,id_followed=self.followed_track_id)
         
     def check_same_ids(self, tracks):
         for track in tracks:
