@@ -35,7 +35,13 @@ services:
 
   img:
     image: img:full
-    command: "python -m img_xtend.applications.all_apps" 
+    # Overrides default command so things don't shut down after the process ends.
+    command: /bin/sh -c "while sleep 1000000; do :; done"
+    # command: bash
+    # stdin_open: true
+    # tty: true
+
+    # command: "python -m img_xtend.applications.all_apps" 
     environment:
       - PYTHONUNBUFFERED=1
       - TIME_INTERVAL=2

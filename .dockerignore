@@ -1,3 +1,5 @@
 resnet_v1_with_params.onnx
 resnet_int8.trt
 resnet_fp16.trt
+.git
+model_weigths

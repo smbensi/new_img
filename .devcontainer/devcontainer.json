@@ -1,27 +1,46 @@
 {
-    "name": "Dev Container",
-    "runArgs": [
-      "--network=host",
-  ],
-    "build": {
-      "dockerfile": "Dockerfile",
-      "context": ".."
-    },
-    "customizations": {
-      "vscode": {
-          // "settings": {
-          //     "python.defaultInterpreterPath": "/opt/my_python_dev/bin/python3",
-          //     "python.selectInterpreter": "/opt/my_python_dev/bin/python3"
-          // },
-          "extensions": [
-              "ms-python.python",
-              "ms-python.debugpy",
-              "ms-toolsai.jupyter",
-          ]
-      }
-    },
-    "privileged": true
+  "name": "img_new:full",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "img",
+  "shutdownAction": "stopCompose",
+  "workspaceFolder": "/code",
+  "overrideCommand": true
+  
+  
+
+
+
+
+  //   "runArgs": [
+  //     "--network=host",
+  // ],
+    // "build": {
+    //   "dockerfile": "../Dockerfile",
+    //   "context": ".."
+    // },
+  // "customizations": {
+  //   "vscode": {
+  //       // "settings": {
+  //       //     "python.defaultInterpreterPath": "/opt/my_python_dev/bin/python3",
+  //       //     "python.selectInterpreter": "/opt/my_python_dev/bin/python3"
+  //       // },
+  //       "extensions": [
+  //           "ms-python.python",
+  //           "ms-python.debugpy",
+  //           "ms-toolsai.jupyter",
+  //       ]
+  //   }
+  // },
+    // "privileged": true
 
 
 
 }
+
+// {
+//   "name": "[Optional] Your project name here",
+//   "dockerComposeFile": "../docker-compose.yml",
+//   "service": "the-name-of-the-service-you-want-to-work-with-in-vscode",
+//   "workspaceFolder": "/default/workspace/path/in/container/to/open",
+//   "shutdownAction": "stopCompose"
+// }

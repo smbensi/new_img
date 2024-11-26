@@ -88,7 +88,10 @@ class TritonRemoteModel:
         infer_outputs = [self.InferRequestedOutput(output_name) for output_name in self.output_names]
         outputs = self.triton_client.infer(model_name=self.endpoint, inputs=infer_inputs, outputs=infer_outputs)
         
-        return [outputs.as_numpy(output_name).astype(input_format) for output_name in self.output_names]
+        
+        res = [outputs.as_numpy(output_name).astype(input_format) for output_name in self.output_names]
+        return res
 
     def __call__(self, *inputs: np.ndarray):
-        self.forward(*inputs)
+        emb = self.forward(*inputs)
+        return emb

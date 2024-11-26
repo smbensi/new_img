@@ -105,10 +105,10 @@ if __name__=="__main__":
     a = ResNetModel()
 
     img = cv2.imread("/home/nvidia/dev/img_new/scripts/face_jake.jpg")
-    img = np.ones((160,160,3))
+    img = np.ones((160,160,3),dtype=np.float32)
     print(img.dtype)
     print(img.shape)
     output = a(img)
     np.save('/home/nvidia/dev/img_new/scripts/ones_triton.npy', output)
 
-    print(f'{output[0].shape = }')
+    print(f'{output.shape = }')
