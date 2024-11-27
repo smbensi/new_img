@@ -25,6 +25,7 @@ services:
         - /home/nvidia/xtend/shared/ml-artifacts/object_detection:/object_detection_model_repository
         - /home/nvidia/xtend/shared/ml-artifacts/recognition:/recognition_model_repository
         - /home/nvidia/dev/img_new/reid:/reid_model_repository
+        - /home/nvidia/xtend/shared/resnet_onnx:/resnet_onnx
 
       healthcheck:
         test: ["CMD-SHELL", "curl localhost:8000"]

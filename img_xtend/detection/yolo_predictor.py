@@ -18,11 +18,12 @@ class YoloV8:
     def __init__(self, pose:bool=False):
         start = time.time()
         model_folder = "/code/models" if is_docker() else f'{ROOT_PARENT}/models/pose_estimation' # FIXME verifier que c'est la bonne adresse
+        triton_ip = os.getenv("TRITON_IP","localhost")
         try:
             if pose:
                 if USE_TRITON:
                     LOGGER.debug("****POSE MODEL FROM TRITON****")
-                    model_path = f'http://localhost:8000/yoloV8_pose'
+                    model_path = f'http://{triton_ip}:8000/yoloV8_pose'
                 else:
                     model_name = "yolov8n-pose.pt"
                     model_path = f'{model_folder}/{model_name}'
@@ -40,7 +41,7 @@ class YoloV8:
             else:
                 if USE_TRITON:
                     LOGGER.debug("****DETECTION MODEL FROM TRITON****")
-                    model_path = f'http://localhost:8000/yolov8'
+                    model_path = f'http://{triton_ip}:8000/yolov8'
                 else:
                     LOGGER.debug("****DETECTION MODEL IS LOCAL (NOT TRITON)****")
                     model_name = os.getenv("MODEL_NAME","yolov8n.pt") #FP16.engine")

@@ -45,7 +45,8 @@ class ReIDModel():
         USE_TRITON = True
         if USE_TRITON:
             self.half = False
-            path = "http://localhost:8000/osnet_x1_0"
+            triton_ip = os.getenv("TRITON_IP","localhost")
+            path = f"http://{triton_ip}:8000/osnet_x1_0"
             self.model = triton.TritonRemoteModel(path)
             self.device = 'cpu'
         else:

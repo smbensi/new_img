@@ -1,3 +1,5 @@
+import os
+
 from urllib.parse import urlsplit
 
 import numpy as np
@@ -12,8 +14,11 @@ class ResNetModel:
     def __init__(
         self,
         ):
+        self.path = ""
+        
         if USE_TRITON:
-            self.path = 'http://localhost:8000/resnet'
+            triton_ip = os.getenv("TRITON_IP","localhost")
+            self.path = f'http://{triton_ip}:8000/resnet_onnx'
             try:
                 self.model = TritonRemoteModel(self.path)
             except ConnectionRefusedError as e:
@@ -46,6 +51,9 @@ class ResNetModel:
         input = cv2.resize(input, (160,160)) # to be adapted to our Resnet
         input = (input-127.5)/128
         input = np.transpose(input, (2,0,1)).astype(np.float32)
+        
+        if "onnx" in self.path:
+            input = np.expand_dims(input, axis=0)
         # input = np.expand_dims(input, axis=0).astype(np.float32)
         # input = np.ones((3,160,160),dtype=np.float32)
         return input
