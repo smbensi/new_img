@@ -13,3 +13,4 @@ img.jpg
 *.trt
 *.onnx
 *.pt
+pose_estimation_triton_folder
