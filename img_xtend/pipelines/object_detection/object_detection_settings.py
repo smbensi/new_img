@@ -9,9 +9,10 @@ MSG_SEND_INTERVAL = 2 # seconds
 
 # TODO a remplacer
 if is_docker():
-    path = '/code/shared/ml-artifacts/object_detection/objects.json'
+    path = '/code/shared/ml-artifacts/yolov8/objects.json'
+    # path = '/code/shared/ml-artifacts/object_detection/objects.json'
 else:
-    path = '/home/nvidia/xtend/shared/ml-artifacts/object_detection/objects.json'
+    path = '/home/nvidia/xtend/shared/ml-artifacts/yolov8/objects.json'
 with open(path) as f:
     data = json.load(f)
 list_of_objects = data["objects"]

@@ -115,9 +115,11 @@ def is_docker() -> bool:
     Returns:
         bool: True if the script is running inside a Docker container, False otherwise
     """
-    with contextlib.suppress(Exception):
-        with open("/proc/self/cgroup") as f:
-            return "docker" in f.read()
+    if os.path.exists("/.dockerenv"):
+        return True
+    # with contextlib.suppress(Exception):
+    #     with open("/proc/self/cgroup") as f:
+    #         return "docker" in f.read()
     return False
 
 def read_device_model() -> str:
