@@ -1,4 +1,4 @@
-
+import os
 import numpy as np
 
 from img_xtend.utils import LOGGER, ROOT_PARENT
@@ -34,7 +34,8 @@ if RUN_FACE_RECOGNITION or RUN_TRACKING:
     if RUN_FACE_RECOGNITION:
         recognition = FaceRecognition()    
 
-source = "0"
+source = os.getenv("SOURCE","0")
+LOGGER(f"video source is {source}")
 # source = f"{ROOT_PARENT}/shared/Jakes_photos/20230724_112512.jpg"
 # source = f"{ROOT_PARENT}/scripts/img_mat.jpg"
 # source = f"{ROOT_PARENT}/scripts/face_jake.jpg"
