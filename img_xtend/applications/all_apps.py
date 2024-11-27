@@ -35,7 +35,7 @@ if RUN_FACE_RECOGNITION or RUN_TRACKING:
         recognition = FaceRecognition()    
 
 source = os.getenv("SOURCE","0")
-LOGGER(f"video source is {source}")
+LOGGER.debug(f"video source is {source}")
 # source = f"{ROOT_PARENT}/shared/Jakes_photos/20230724_112512.jpg"
 # source = f"{ROOT_PARENT}/scripts/img_mat.jpg"
 # source = f"{ROOT_PARENT}/scripts/face_jake.jpg"
