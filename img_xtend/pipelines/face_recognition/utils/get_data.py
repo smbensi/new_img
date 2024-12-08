@@ -37,7 +37,12 @@ def get_data_from_db() -> Tuple[List[str],List[str],List[np.ndarray],List[str]]:
 def filter_face_vecs(column:str=MAPPING.COLLECTION.value,
                      values:List[str]=None)-> pd.DataFrame:
     df = cfg.ALL_FACE_VECTORS
-    collections = list(df[MAPPING.COLLECTION.value].unique())
+    try:
+        collections = list(df[MAPPING.COLLECTION.value].unique())
+    except Exception as e:
+        logger.debug(f"Error with collections: {e}")
+        collections = []
+        
         
     logger.debug(f"Unique values {collections=} and {type(collections)=}")
     if values==None or values==[]:
