@@ -66,8 +66,10 @@ class FaceRecognition():
 
         LOGGER.debug(f"{collectionNames=}")
         self.faces_df = filter_face_vecs(values=collectionNames)
-        LOGGER.debug(f"{self.faces_df[['_id','name', 'collectionName']]=}")
-        
+        try:
+            LOGGER.debug(f"{self.faces_df[['_id','name', 'collectionName']]=}")
+        except KeyError as e:
+            LOGGER.debug(f"ERROR: {e}")
         
         # for debugging
         self.previous_person = None
