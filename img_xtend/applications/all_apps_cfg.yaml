@@ -1,0 +1,58 @@
+# general parameters
+INTEGRATION:
+  source: 0
+  LOAD_MODELS_OBJECT_DETECTION: True
+  LOAD_MODELS_FOLLOW_ME: True
+  LOAD_MODELS_FACE_RECOGNITON: True
+  RUN_FACE_RECOGNITION: False
+  RUN_OBJECT_DETECTION: False
+  RUN_FOLLOW_ME: False
+  #mqtt params
+  use_mqtt: True
+  PORT: 1883
+  BROKER: localhost
+
+object_detection:  # for object_detection and follow me
+  # mqtt params
+  TOPICS_FROM_BRAIN:
+    ACTIVATE_DETECTION: /robot/from_brain/img/obj_detection
+    IS_ALIVE: /robot/from_brain/are_you_alive
+    ACTIVATE_FOLLOW_ME: robot/ros2/set/follow_person_mode
+  TOPICS_TO_BRAIN:
+    DETECTION_FDBK: /robot/to_brain/img/obj_found
+    APP_ALIVE: /robot/to_brain/alive
+  TOPICS_TO_ROS:
+    BBOX_OBJECT: robot/ros2/objectFound
+  msg_alive: {"app":"object_detection","alive":True}
+
+
+face_recognition:
+  # similarity parameters
+  SIMILARITY_THRESHOLD: 0.75 
+  NEW_UNKNOWN_PERSON: 1.2    # similarity threshold before adding a new  unknown person
+  SIMILARITY_THRESHOLD_UNKNOWN: 0.9
+  DEFAULT_FRAMES_BEFORE_RECOGNITION: 4  # frames
+  DEFAULT_MARGIN_IN_FRAME_TO_OMIT: 0.33  # pourcentage/100 in the 2 sides of the frames to omit
+  DEFAULT_UNKNOWN_FRAMES_FOR_RECOGNITION: 20  # frames
+  # mqtt params
+  TOPICS_FROM_BRAIN: 
+    IS_ALIVE: /robot/from_brain/are_you_alive
+    DATA_UPDATED: /robot/from_brain/data_updated
+    BUILD_FACE_VECTOR: /robot/from_brain/img/build_face_vector
+    FACE_TIMEOUT: /robot/from_brain/img/setfacetimeout
+    NEW_SEARCH: /robot/from_brain/img/search_for_face
+    CAM_ACTIVE: /robot/from_brain/general/camera_active
+    STOP_SERVICE: /robot/from_brain/img/stop_searching 
+  TOPICS_TO_BRAIN: 
+    FACE_RECOGNITION: /robot/to_brain/img/facefound
+    APP_ALIVE: /robot/to_brain/alive
+    FACE_VECTOR_BUILT: /robot/to_brain/face_vector_built
+  msg_alive: {"app":"img","alive":True}
+  DEFAULT_MSG_SPEED: -1  # TODO explain
+  DEFAULT_NULL_TIMEOUT: 10
+  DEFAULT_MULT_TIMEOUT: 5 # TODO explain
+
+
+
+
+

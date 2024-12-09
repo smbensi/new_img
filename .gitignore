@@ -14,3 +14,4 @@ img.jpg
 *.onnx
 *.pt
 pose_estimation_triton_folder
+object_detection

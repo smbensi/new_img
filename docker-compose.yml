@@ -22,7 +22,7 @@ services:
         - /home/nvidia/xtend/shared/ml-artifacts/pose_estimation:/pose_estimation_model_repository
         # - /home/nvidia/xtend/shared/ml-artifacts/stt_model_repository:/stt_model_repository
         # - /home/nvidia/xtend/shared/ml-artifacts/card_reader_model_repository_1_0:/ocr_model_repository
-        - /home/nvidia/xtend/shared/ml-artifacts/object_detection:/object_detection_model_repository
+        - /home/nvidia/dev/img_new/object_detection:/object_detection_model_repository
         - /home/nvidia/xtend/shared/ml-artifacts/recognition:/recognition_model_repository
         - /home/nvidia/dev/img_new/reid:/reid_model_repository
         - /home/nvidia/xtend/shared/resnet_onnx:/resnet_onnx
