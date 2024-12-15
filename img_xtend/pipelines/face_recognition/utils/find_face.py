@@ -42,7 +42,7 @@ def get_face_from_pose(pose_results,img):
         if nose is None or eyes is None:
             continue
         x, y, h, w = find_face(nose, eyes[0], eyes[1], img.shape )
-        if h <= 0 or w <= 0:
+        if h <= 0 or w <= cfg.THRESHOLD_DISTANCE_EYES:
                 continue
         face = img[y:y+h,x:x+w]
         face_all_data["face"] = face        

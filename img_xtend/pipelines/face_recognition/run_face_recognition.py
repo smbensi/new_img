@@ -8,6 +8,8 @@ import pandas as pd
 import cv2
 
 from img_xtend.utils import LOGGER, ROOT_PARENT
+from img_xtend.mqtt import mqtt_handler, mqtt_settings
+
 from img_xtend.pipelines.face_recognition.utils.get_data import (
     get_data_from_db,
     get_data_from_json,
@@ -16,7 +18,104 @@ from img_xtend.pipelines.face_recognition.utils.get_data import (
 )
 from img_xtend.pipelines.face_recognition.utils.face_dataclasses import UnknownFace, KnownFace
 from img_xtend.pipelines.face_recognition.configuration import config as cfg
-from img_xtend.recognition.resnet import ResNetModel
+from img_xtend.tracker.matching.iou_matching import iou
+   
+def on_message(client, userdata, message):
+    
+    if message.topic == userdata["face_recognition"]["TOPICS_FROM_BRAIN"]["IS_ALIVE"]:
+        client.publish(cfg.TOPICS_TO_BRAIN["APP_ALIVE"],json.dumps(cfg.msg_alive))
+
+    elif message.topic == userdata["face_recognition"]["TOPICS_TO_BRAIN"]["APP_ALIVE"]:
+        msg = message.payload.decode("utf-8")
+        LOGGER.debug(f"message TO BRAIN {msg}")
+        
+    elif message.topic == userdata["face_recognition"]["TOPICS_FROM_BRAIN"]["FACE_TIMEOUT"]:
+        msg = message.payload.decode("utf-8")
+        LOGGER.debug(f"message new timeout {msg}")
+        cfg.NULL_TIMEOUT = int(msg)
+
+    elif message.topic == userdata["face_recognition"]["TOPICS_FROM_BRAIN"]["NEW_SEARCH"]:
+        """
+        6 fields in the json:
+            - 'collectionNames':[list of collection names to search faces from]
+            - 'nFrames': nmber of frames before puslishing recognized face default to 8
+            - 'FOVMargin': sets the margin added to both sides of the frame where 
+                the faces are omited 
+            - 'sendRects': bool (default False)
+            - 'msgSpeed': fraction (seconds - float)
+            - 'idTimeout': n (seconds) 0 = unlimited
+             
+        """
+        
+        msg = message.payload.decode("utf-8")
+        try:
+            msg:dict = json.loads(msg)
+            LOGGER.debug(f"{msg=}")
+            
+        except:
+            LOGGER.debug(f"{msg=} is not a JSON")
+            msg = {}
+        
+        if msg.get('disabled',cfg.DISABLED):
+            LOGGER.debug(f"STOP PROCESSING")
+            cfg.DO_RECOGNITION = False
+        else:
+            cfg.DO_RECOGNITION = True
+            cfg.FRAMES_BEFORE_RECOGNITION = int(msg.get('nFrames',
+                                                    cfg.DEFAULT_FRAMES_BEFORE_RECOGNITION))
+            cfg.MARGIN_IN_FRAME_TO_OMIT = float(msg.get('FOVMargin',
+                                                        cfg.DEFAULT_MARGIN_IN_FRAME_TO_OMIT))
+            collectionNames = msg.get('collectionNames', None)
+            cfg.COLLECTION = collectionNames
+            LOGGER.debug(f"NEW SEARCH MSG {msg=} \nMake a new search with those collections: {collectionNames} ")
+            
+            cfg.SEND_REC = bool(msg.get('sendRects',cfg.DEFAULT_SEND_REC))
+            cfg.MSG_SPEED = float(msg.get('msgSpeed',cfg.DEFAULT_MSG_SPEED))
+            cfg.NULL_TIMEOUT = float(msg.get('idTimeout', cfg.DEFAULT_NULL_TIMEOUT))
+            if cfg.NULL_TIMEOUT == 0:
+                cfg.NULL_TIMEOUT = 100_000
+            cfg.RECO_FACE.initialize_params(collectionNames=collectionNames)
+            
+            LOGGER.debug(f"PARAMS FOR NEW SEARCH: \nMSG_SPEED={cfg.MSG_SPEED} \nTIMEOUT={cfg.NULL_TIMEOUT} \nFRAMES FOR RECOGNITION={cfg.FRAMES_BEFORE_RECOGNITION}")
+
+    elif message.topic == userdata["face_recognition"]["TOPICS_TO_BRAIN"]["FACE_RECOGNITION"]:
+        msg = message.payload.decode("utf-8")
+        LOGGER.debug(f"\n\n######FACE_RECOGNITION TOPIC {str(msg)}\n")
+    
+    elif message.topic == userdata["face_recognition"]["TOPICS_TO_BRAIN"]["FACE_VECTOR_BUILT"]:
+        msg = message.payload.decode("utf-8")
+        try:
+            msg = json.loads(msg)
+        except:
+            LOGGER.debug(f"{msg} not a JSON")
+        LOGGER.debug(f"FACE_VECTOR_BUILT TOPIC {(msg)}")
+
+    elif message.topic == userdata["face_recognition"]["TOPICS_FROM_BRAIN"]["BUILD_FACE_VECTOR"]:
+        decoded_msg = message.payload.decode("utf-8")
+        try:
+            msg = json.loads(decoded_msg)
+        except:
+            LOGGER.debug(f"{decoded_msg} not a JSON")
+        LOGGER.debug(f"msg received on build face vec {msg}")
+        cfg.VECTORS_PATH = msg["path"]
+        cfg.ID = msg["id"]
+        cfg.COLLECTION = msg["collectionName"]
+        cfg.DO_RECOGNITION = False
+        cfg.ADD_NEW = True
+    
+    elif message.topic == userdata["face_recognition"]["TOPICS_FROM_BRAIN"]["DATA_UPDATED"]:
+        
+        LOGGER.debug("received data update")
+        try:
+            cfg.RECO_FACE.get_registered_faces()
+        except Exception as e:
+            LOGGER.debug(f"***PROBLEM WITH DATA UPDATED***  and the error is {e}")
+        # cfg.FACE_OBJ = FaceRecognition()
+    
+    elif message.topic == cfg.TOPICS_FROM_BRAIN["CAM_ACTIVE"]:
+        msg = message.payload.decode("utf-8")
+        LOGGER.debug(f"Retry Stream Now on device {msg}")
+        cfg.INFO["RETRY_STREAM"] = True
 
 class FaceRecognitionClient():
     """de quoi j'ai besoin:
@@ -37,12 +136,20 @@ class FaceRecognitionClient():
         
     """
     
-    def __init__(self) -> None:
+    def __init__(self, recognition_model, config) -> None:
         
         self.faces_df = pd.DataFrame()
-        self.recognition_model = ResNetModel()
+        self.recognition_model = recognition_model
         self.get_registered_faces()
         self.initialize_params()
+        
+        # connect to mqtt
+        self.use_mqtt = config.get("INTEGRATION",False).get("use_mqtt",False)
+        if self.use_mqtt:
+            topics_to_sub = [(topic,2) for topic in config["face_recognition"]["TOPICS_FROM_BRAIN"].values()]
+            topics_to_sub += [(topic,2) for topic in config["face_recognition"]["TOPICS_TO_BRAIN"].values()]
+            self.mqtt_client = mqtt_handler.init_mqtt_connection('face_recognition_client', topics_to_sub, config, on_message)
+          
         
     def get_registered_faces(self, source:str = cfg.DATA_SOURCE):
         """Get the data of face_vectors, name and collection from diffent sources possible"""
@@ -253,14 +360,27 @@ class FaceRecognitionClient():
                     self.dict_known_faces[id].frames >= self.dict_known_faces[ids[0]].frames:
                     self.dict_known_faces[id].frames = 0
                      
-    def check_if_recognized_in_unrecognized(self, recognized_vec):
+    def check_if_recognized_in_unrecognized(self, recognized_vec, face_bbox):
         keys_to_delete = []
+        def to_tlwh(bbox):
+            w = bbox[2]
+            h = bbox[3]
+            x = bbox[0] - w//2
+            y = bbox[1] - h//2
+            ret = np.array([x,y,w,h])
+            return ret
         
         for i,unknown_face in enumerate(self.list_unknown_faces):
+            
+            iou_match = iou(to_tlwh(face_bbox), np.expand_dims(to_tlwh(unknown_face.bbox),axis=0))
             if np.linalg.norm(unknown_face.face_vector - recognized_vec) < cfg.SIMILARITY_THRESHOLD:
-                LOGGER.debug(f"********************DELETING the Key {i}")
+                LOGGER.debug(f"********************DELETING the Key {unknown_face.index}")
                 keys_to_delete.append(i)
-        
+            elif iou_match > 0.75:
+                LOGGER.debug(f"{iou_match=}, rec_bbox={to_tlwh(face_bbox)}, unknown_bbox={to_tlwh(unknown_face.bbox)}")
+                LOGGER.debug(f"********************BIG IOU DELETING the Key {unknown_face.index}")
+                keys_to_delete.append(i)
+                
         self._delete_elements_from_list(keys_to_delete, 'unknown')
     
     
@@ -351,8 +471,8 @@ class FaceRecognitionClient():
             msg = json.dumps(self.msg_published)
             LOGGER.debug(f"MESSAGE TO PUBLISH MQTT {msg=} ")
             LOGGER.debug(f"{self.dict_known_faces=} \n{self.list_unknown_faces=}")
-            if cfg.FACE_CLIENT is not None:
-                cfg.FACE_CLIENT.publish(
+            if self.mqtt_client is not None:
+                self.mqtt_client.publish(
                             cfg.TOPICS_TO_BRAIN["FACE_RECOGNITION"], msg)
                 
             self.last_time_published = time.time()  
@@ -378,7 +498,7 @@ class FaceRecognitionClient():
                     collectionName = self.faces_df[MAPPING.COLLECTION.value].iloc[idx]
                     
                     self.update_recognized_list(id_recognized,collectionName,biggest=False, face_bbox=face_bbox)
-                    self.check_if_recognized_in_unrecognized(face_embedding)
+                    self.check_if_recognized_in_unrecognized(face_embedding,face_bbox)
                 except Exception as e:
                         LOGGER.debug(f"Error in updating know faces: {e}")
                         

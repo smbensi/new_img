@@ -8,7 +8,8 @@ from img_xtend.data.build import load_inference_source  # load the source of ima
 
 from img_xtend.detection.yolo_predictor import YoloV8
 from img_xtend.tracker.reid_model import ReIDModel # 6 sec
-from img_xtend.pipelines.face_recognition.run_face_recognition import FaceRecognitionClient
+from img_xtend.recognition.resnet import ResNetModel
+
 
 
 # Load data from the DB or config files if needed
@@ -33,7 +34,9 @@ if LOAD_FACE_RECOGNITION or LOAD_TRACKING:
         from img_xtend.pipelines.follow_person.run_follow import FollowTracker
         tracker = FollowTracker(reid_model,config)
     if LOAD_FACE_RECOGNITION:
-        recognition = FaceRecognitionClient()    
+        recognition_model = ResNetModel()
+        from img_xtend.pipelines.face_recognition.run_face_recognition import FaceRecognitionClient
+        recognition_client = FaceRecognitionClient(recognition_model, config)    
 
 source = os.getenv("SOURCE",config["INTEGRATION"]["source"])
 # source = f"{ROOT_PARENT}/shared/Jakes_photos/20230724_112512.jpg"
@@ -58,7 +61,7 @@ for element in dataset: # return list(self.sources), list(images), [""] * self.b
         if integration_stg.RUN_TRACKING:
             tracking_results = tracker.update(img, pose_results)
         if integration_stg.RUN_FACE_RECOGNITION:
-            recognition_results = recognition.update(img, pose_results)
+            recognition_results = recognition_client.update(img, pose_results)
     if integration_stg.RUN_DETECTION:
         object_detector_client.update(img)
         

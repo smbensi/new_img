@@ -28,6 +28,7 @@ object_detection:  # for object_detection and follow me
 
 
 face_recognition:
+  THRESHOLD_DISTANCE_EYES: 70
   # similarity parameters
   SIMILARITY_THRESHOLD: 0.75 
   NEW_UNKNOWN_PERSON: 1.2    # similarity threshold before adding a new  unknown person

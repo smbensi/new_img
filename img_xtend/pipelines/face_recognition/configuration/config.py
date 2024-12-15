@@ -1,30 +1,39 @@
 import os
+import yaml
 
+# Load data from the DB or config files if needed
+config = {}
+config_file = "img_xtend/applications/all_apps_cfg.yaml"
+assert os.path.isfile(config_file)
+with open(config_file, "r") as fo:
+    config = yaml.load(fo.read(), Loader=yaml.FullLoader)
+    
+THRESHOLD_DISTANCE_EYES = config["face_recognition"]["THRESHOLD_DISTANCE_EYES"]
 ### ************************
 # MQTT PARAMETERS  
 #### ***********************
-FACE_CLIENT = None
+# FACE_CLIENT = None
 
 
-BROKER = "localhost"
-PORT = 1883
+# BROKER = "localhost"
+# PORT = 1883
 
-TOPICS_FROM_BRAIN = {
-    "IS_ALIVE":"/robot/from_brain/are_you_alive",
-    "DATA_UPDATED":"/robot/from_brain/data_updated",
-    "BUILD_FACE_VECTOR":"/robot/from_brain/img/build_face_vector",
-    "FACE_TIMEOUT":"/robot/from_brain/img/setfacetimeout",
-    "NEW_SEARCH":"/robot/from_brain/img/search_for_face",
-    "CAM_ACTIVE":"/robot/from_brain/general/camera_active",
-    "STOP_SERVICE":"/robot/from_brain/img/stop_searching" 
-}
+# TOPICS_FROM_BRAIN = {
+#     "IS_ALIVE":"/robot/from_brain/are_you_alive",
+#     "DATA_UPDATED":"/robot/from_brain/data_updated",
+#     "BUILD_FACE_VECTOR":"/robot/from_brain/img/build_face_vector",
+#     "FACE_TIMEOUT":"/robot/from_brain/img/setfacetimeout",
+#     "NEW_SEARCH":"/robot/from_brain/img/search_for_face",
+#     "CAM_ACTIVE":"/robot/from_brain/general/camera_active",
+#     "STOP_SERVICE":"/robot/from_brain/img/stop_searching" 
+# }
 
-TOPICS_TO_BRAIN = {
-    "FACE_RECOGNITION": "/robot/to_brain/img/facefound",
-    "APP_ALIVE":"/robot/to_brain/alive",
-    "FACE_VECTOR_BUILT":"/robot/to_brain/face_vector_built"
-}
-msg_alive = {"app":"img","alive":True}
+# TOPICS_TO_BRAIN = {
+#     "FACE_RECOGNITION": "/robot/to_brain/img/facefound",
+#     "APP_ALIVE":"/robot/to_brain/alive",
+#     "FACE_VECTOR_BUILT":"/robot/to_brain/face_vector_built"
+# }
+# msg_alive = {"app":"img","alive":True}
 
 
 ### ************************
