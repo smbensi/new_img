@@ -4,13 +4,14 @@ INTEGRATION:
   LOAD_MODELS_OBJECT_DETECTION: True
   LOAD_MODELS_FOLLOW_ME: True
   LOAD_MODELS_FACE_RECOGNITON: True
-  RUN_FACE_RECOGNITION: False
+  RUN_FACE_RECOGNITION: True
   RUN_OBJECT_DETECTION: False
   RUN_FOLLOW_ME: False
   #mqtt params
   use_mqtt: True
   PORT: 1883
   BROKER: localhost
+  keepalive: 240
 
 object_detection:  # for object_detection and follow me
   # mqtt params

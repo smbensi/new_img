@@ -8,7 +8,7 @@ import paho.mqtt.client as mqtt
 from img_xtend.utils import LOGGER
 
 import img_xtend.mqtt.mqtt_settings as params
-from img_xtend.pipelines.object_detection import object_detection_settings
+# from img_xtend.pipelines.object_detection import object_detection_settings
 
 # logger = logging.getLogger(__name__)
 
@@ -29,10 +29,12 @@ def on_disconnect(client, userdata, rc):
     LOGGER.debug("Disconnected from mqtt")
     # client.loop_stop()
 
-def connect_to_broker():
+def connect_to_broker(userdata):
     # Keep Alive params: The keep-alive interval, which is the maximum time interval between communications with the broker.
     # If the client does not communicate within this time frame, the broker may consider the client disconnected.
-    client.connect(params.BROKER, params.PORT, keepalive=120)
+    client.connect(userdata["INTEGRATION"]["BROKER"], 
+                   userdata["INTEGRATION"]["PORT"],
+                   keepalive=userdata["INTEGRATION"]["keepalive"])
     client.loop_start()
 
 def disconnect():
@@ -50,7 +52,7 @@ def init_mqtt_connection(name, topics_to_sub, cfg, on_message):
     client.on_connect = on_connect
     client.on_message = on_message
     client.connect_to_broker = connect_to_broker
-    client.connect_to_broker()
+    client.connect_to_broker(client._userdata)
     return client
 
 # def on_message(client, userdata, message):

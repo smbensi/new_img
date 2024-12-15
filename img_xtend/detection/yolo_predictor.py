@@ -5,7 +5,7 @@ import time
 
 import numpy as np
 import cv2
-from ultralytics import YOLO
+from ultralytics import YOLO # TODO very long to load
 import tritonclient
 
 from img_xtend.utils import LOGGER, is_docker, ROOT_PARENT

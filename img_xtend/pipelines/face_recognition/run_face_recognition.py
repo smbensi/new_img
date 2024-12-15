@@ -18,7 +18,7 @@ from img_xtend.pipelines.face_recognition.utils.face_dataclasses import UnknownF
 from img_xtend.pipelines.face_recognition.configuration import config as cfg
 from img_xtend.recognition.resnet import ResNetModel
 
-class FaceRecognition():
+class FaceRecognitionClient():
     """de quoi j'ai besoin:
     - init 10
     - update: 1
@@ -51,6 +51,7 @@ class FaceRecognition():
         elif source=="JSON":
             self.faces_df = get_data_from_json(f"{ROOT_PARENT}/shared/Jakes_photos/1234.json")
         else: 
+            LOGGER.error("WRONG DATA SOURCE")
             pass
         LOGGER.debug("*** DATA UPDATED ***")
 
@@ -59,9 +60,7 @@ class FaceRecognition():
         self.list_unknown_faces = []
         self.last_len_of_unreco_list = 0
         
-        # self.published_id = ''
         self.published = False
-        # self.face_timeout = 0
         self.mqtt_params()
 
         LOGGER.debug(f"{collectionNames=}")
@@ -258,7 +257,7 @@ class FaceRecognition():
         keys_to_delete = []
         
         for i,unknown_face in enumerate(self.list_unknown_faces):
-            if (unknown_face.face_vector - recognized_vec).norm().item() < cfg.SIMILARITY_THRESHOLD:
+            if np.linalg.norm(unknown_face.face_vector - recognized_vec) < cfg.SIMILARITY_THRESHOLD:
                 LOGGER.debug(f"********************DELETING the Key {i}")
                 keys_to_delete.append(i)
         
@@ -371,7 +370,7 @@ class FaceRecognition():
         
         if len(self.faces_df) > 0:
             val,idx = self.get_minimum_distance(face_embedding)
-            print(f"{val=} and person {self.faces_df.name.iloc[idx]}")
+            # print(f"{val=} and person {self.faces_df.name.iloc[idx]}")
             if val < cfg.SIMILARITY_THRESHOLD:
                 try:
                     id_recognized = self.faces_df[MAPPING.ID.value].iloc[idx]

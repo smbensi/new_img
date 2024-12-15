@@ -2,12 +2,17 @@ import os
 import abc
 from typing import List
 import time
+import json
 
 import torch
 import numpy as np
 import cv2
 
 from img_xtend.utils import LOGGER, get_time
+from img_xtend.settings import integration_stg
+from img_xtend.mqtt import mqtt_handler, mqtt_settings
+
+
 from img_xtend.detection.bbox import Bbox
 from img_xtend.pose_estimation import keypoints
 from img_xtend.tracker.config.config_utils import weights_path, config_path, get_config
@@ -15,7 +20,57 @@ from img_xtend.tracker import tracker_settings, tracker
 from img_xtend.tracker.matching.metrics_matching import NearestNeighborDistanceMetric
 from img_xtend.tracker.matching.match_dataclass import MatchData
 
+
 from img_xtend.pipelines.follow_person import follow_settings, utils
+
+def on_message(client, userdata, message):
+
+    decoded_message = (message.payload.decode("utf-8"))
+    LOGGER.debug(f"{decoded_message}")
+    LOGGER.debug(f"{userdata=}")
+    LOGGER.debug(f"{vars(client)=}")
+    LOGGER.debug(f"{client._username=}")
+    
+    print(f"{userdata=}")
+    LOGGER.debug(f"{message.topic=}")
+    
+    if message.topic == userdata["object_detection"]["TOPICS_FROM_BRAIN"]["IS_ALIVE"]:
+        client.publish(userdata["object_detection"]["TOPICS_TO_BRAIN"]["APP_ALIVE"],
+                       json.dumps(userdata["object_detection"]["msg_alive"]))
+
+    elif message.topic == userdata["object_detection"]["TOPICS_TO_BRAIN"]["APP_ALIVE"]:
+        LOGGER.debug(f"APP ALIVE {json.loads(decoded_message)}")
+        
+    # elif message.topic == userdata["object_detection"]["TOPICS_TO_BRAIN"]["DETECTION_FDBK"]:
+    #     # print(decoded_message)
+    #     pass
+    
+    # elif message.topic == userdata["object_detection"]["TOPICS_TO_ROS"]["BBOX_OBJECT"]:
+    #     # LOGGER.debug(f"TO ROS: {decoded_message}")
+    #     pass
+        
+    
+    elif message.topic == userdata["object_detection"]["TOPICS_FROM_BRAIN"]["ACTIVATE_FOLLOW_ME"]:
+        LOGGER.debug(f"msg for FOLLOW topic : {decoded_message} and type= {type(decoded_message)}")
+        if isinstance(decoded_message, str):
+            LOGGER.debug("the message is a string")
+            
+        if decoded_message == "True":
+            integration_stg.RUN_TRACKING = True
+            follow_settings.INIT_TRACKER = True
+            follow_settings.MATCHES_SOURCE = {"FRAMES":0, "IOU":0, "APPEARANCE":0,"MANUAL":0}
+            
+        elif decoded_message == "False":
+            integration_stg.RUN_TRACKING = False
+            manual_pourcentage = 100* follow_settings.MATCHES_SOURCE["MANUAL"] / follow_settings.MATCHES_SOURCE["FRAMES"]
+            
+            appearance_pourcentage = 100* follow_settings.MATCHES_SOURCE["APPEARANCE"] / follow_settings.MATCHES_SOURCE["FRAMES"]
+            
+            iou_pourcentage = 100* follow_settings.MATCHES_SOURCE["IOU"] / follow_settings.MATCHES_SOURCE["FRAMES"] 
+            
+            LOGGER.debug(f"STATS: {follow_settings.MATCHES_SOURCE} \n Appearance={appearance_pourcentage:.0f}%  IOU={iou_pourcentage:.0f}% MANUAL={manual_pourcentage:.0f}%")
+
+
 
 class BaseTracker(abc.ABC):
     def __init__(self):
@@ -43,7 +98,7 @@ class FollowTracker(BaseTracker):
         - save_image: Save the frame with the bbox
 
     """
-    def __init__(self, reid_model) -> None:
+    def __init__(self, reid_model,config=None) -> None:
         """
         The constructors does 2 things:
             - Loads the Re-id model
@@ -52,28 +107,37 @@ class FollowTracker(BaseTracker):
         
         super().__init__()
         tracker_type = tracker_settings.tracker_name
-        cfg = get_config(tracker_type, config_path)
+        tracker_cfg = get_config(tracker_type, config_path)
         LOGGER.debug(f"{follow_settings.MATCHES_TO_PRINT=}")
         LOGGER.debug(f"\n")
-        LOGGER.debug(f"CONFIG TRACKER: {config_path=} {cfg}")
+        LOGGER.debug(f"CONFIG TRACKER: {config_path=} {tracker_cfg}")
         LOGGER.debug(f"\n")
         LOGGER.debug(f"{tracker_settings.USE_MANUAL_MATCH=}")
         
-        self.device = f'cuda:{cfg.device_id}' if torch.cuda.is_available() else 'cpu'
-        self.fp16 = cfg.fp16
-        self.max_dist=cfg.max_dist
-        self.max_iou_dist=cfg.max_iou_dist
-        self.max_age=cfg.max_age
-        self.n_init=cfg.n_init
-        self.nn_budget=cfg.nn_budget
-        self.mc_lambda=cfg.mc_lambda
-        self.ema_alpha=cfg.ema_alpha
+        self.device = f'cuda:{tracker_cfg.device_id}' if torch.cuda.is_available() else 'cpu'
+        self.fp16 = tracker_cfg.fp16
+        self.max_dist=tracker_cfg.max_dist
+        self.max_iou_dist=tracker_cfg.max_iou_dist
+        self.max_age=tracker_cfg.max_age
+        self.n_init=tracker_cfg.n_init
+        self.nn_budget=tracker_cfg.nn_budget
+        self.mc_lambda=tracker_cfg.mc_lambda
+        self.ema_alpha=tracker_cfg.ema_alpha
         
         self.per_class = False
         
         self.model = reid_model
         
         self.initialize_tracker()
+        
+        # connect to mqtt
+        self.use_mqtt = config.get("INTEGRATION",False).get("use_mqtt",False)
+        if self.use_mqtt:
+            topics_to_sub = [(topic,2) for topic in config["object_detection"]["TOPICS_FROM_BRAIN"].values()]
+            topics_to_sub += [(topic,2) for topic in config["object_detection"]["TOPICS_TO_BRAIN"].values()]
+            topics_to_sub += [(topic,2) for topic in config["object_detection"]["TOPICS_TO_ROS"].values()]
+            self.mqtt_client = mqtt_handler.init_mqtt_connection('follow_me_client', topics_to_sub, config, on_message)
+          
         
     def initialize_tracker(self):
         self.tracker = tracker.Tracker(
@@ -99,7 +163,7 @@ class FollowTracker(BaseTracker):
         # for debugging
         self.frames_saved = 0
     
-    def update(self, img: np.ndarray, bboxes, reinit=False):
+    def update(self, img: np.ndarray, bboxes):
         """
         Before updating the tracker , compute the embedddings of each bbox
         and also compute the IOU between the bboxes
@@ -109,9 +173,10 @@ class FollowTracker(BaseTracker):
             img (np.array): the frame containing the objects detected
             reinit (bool): restart the tracker
         """
-        if reinit:
+        if follow_settings.INIT_TRACKER:
             self.initialize_tracker()
             LOGGER.debug(f"reinitialized")
+            follow_settings.INIT_TRACKER = False
         
         if self.frames == 0:
             self.height, self.width = img.shape[:2]

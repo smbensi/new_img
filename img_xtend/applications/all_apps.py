@@ -1,22 +1,18 @@
 import os
 import numpy as np
-import yaml
 
-from img_xtend.utils import LOGGER, ROOT_PARENT
-from img_xtend.data.build import load_inference_source
+from img_xtend.utils import LOGGER
+from img_xtend.settings import integration_stg
+
+from img_xtend.data.build import load_inference_source  # load the source of images
+
 from img_xtend.detection.yolo_predictor import YoloV8
-from img_xtend.tracker.reid_model import ReIDModel
-from img_xtend.mqtt.mqtt_handler import init_mqtt_connection
-from img_xtend.pipelines.face_recognition.recognize_face import FaceRecognition
-
+from img_xtend.tracker.reid_model import ReIDModel # 6 sec
+from img_xtend.pipelines.face_recognition.run_face_recognition import FaceRecognitionClient
 
 
 # Load data from the DB or config files if needed
-config = {}
-config_file = "img_xtend/applications/all_apps_cfg.yaml"
-assert os.path.isfile(config_file)
-with open(config_file, "r") as fo:
-    config = yaml.load(fo.read(), Loader=yaml.FullLoader)
+config = integration_stg.config
 
 
 # check if we need to load models
@@ -35,38 +31,35 @@ if LOAD_FACE_RECOGNITION or LOAD_TRACKING:
     if LOAD_TRACKING:
         reid_model = ReIDModel()
         from img_xtend.pipelines.follow_person.run_follow import FollowTracker
-        tracker = FollowTracker(reid_model)
+        tracker = FollowTracker(reid_model,config)
     if LOAD_FACE_RECOGNITION:
-        recognition = FaceRecognition()    
+        recognition = FaceRecognitionClient()    
 
 source = os.getenv("SOURCE",config["INTEGRATION"]["source"])
-LOGGER.debug(f"video source is {source}")
 # source = f"{ROOT_PARENT}/shared/Jakes_photos/20230724_112512.jpg"
 # source = f"{ROOT_PARENT}/scripts/img_mat.jpg"
 # source = f"{ROOT_PARENT}/scripts/face_jake.jpg"
+LOGGER.debug(f"video source is {source}")
 
 dataset = load_inference_source(source)  # load the source of images
 LOGGER.debug(f"{source=} and {dataset.source_type=}")
 
-# TODO send alive        
-
-
 for element in dataset: # return list(self.sources), list(images), [""] * self.bs
     
-    img = element[1][0]
+    img = element[1][0] # get only the image of the first source
     if not isinstance(img, np.ndarray):
         LOGGER.warning("The img is not a np array")
         continue
     
     # Run inferences on the models
-    if RUN_TRACKING or RUN_FACE_RECOGNITION:
+    if integration_stg.RUN_TRACKING or integration_stg.RUN_FACE_RECOGNITION:
         pose_results = pose_estimation_model.predict(img)
         
-        if RUN_TRACKING:
+        if integration_stg.RUN_TRACKING:
             tracking_results = tracker.update(img, pose_results)
-        if RUN_FACE_RECOGNITION:
+        if integration_stg.RUN_FACE_RECOGNITION:
             recognition_results = recognition.update(img, pose_results)
-    if RUN_DETECTION:
+    if integration_stg.RUN_DETECTION:
         object_detector_client.update(img)
         
     # post-process the results

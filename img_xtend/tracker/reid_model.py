@@ -7,7 +7,7 @@ import torch
 
 from img_xtend.utils import LOGGER, triton
 from img_xtend.tracker.config.config_utils import weights_path, config_path, get_config
-from img_xtend.tracker.appearance.reid_auto_backend import ReidAutoBackend
+from img_xtend.tracker.appearance.reid_auto_backend import ReidAutoBackend  # TODO take time to execute
 from img_xtend.tracker import tracker_settings
 
 def download_weights(type):
