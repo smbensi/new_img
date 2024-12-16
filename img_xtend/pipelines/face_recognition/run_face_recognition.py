@@ -9,7 +9,7 @@ import cv2
 
 from img_xtend.utils import LOGGER, ROOT_PARENT
 from img_xtend.mqtt import mqtt_handler, mqtt_settings
-
+from img_xtend.settings import integration_stg
 from img_xtend.pipelines.face_recognition.utils.get_data import (
     get_data_from_db,
     get_data_from_json,
@@ -61,9 +61,12 @@ def on_message(client, userdata, message):
         
         if msg.get('disabled',cfg.DISABLED):
             LOGGER.debug(f"STOP PROCESSING")
-            cfg.DO_RECOGNITION = False
+            # cfg.DO_RECOGNITION = False
+            integration_stg.RUN_FACE_RECOGNITION = False
         else:
-            cfg.DO_RECOGNITION = True
+            integration_stg.RUN_FACE_RECOGNITION = True
+            
+            # cfg.DO_RECOGNITION = True
             cfg.FRAMES_BEFORE_RECOGNITION = int(msg.get('nFrames',
                                                     cfg.DEFAULT_FRAMES_BEFORE_RECOGNITION))
             cfg.MARGIN_IN_FRAME_TO_OMIT = float(msg.get('FOVMargin',
@@ -104,7 +107,8 @@ def on_message(client, userdata, message):
         cfg.VECTORS_PATH = msg["path"]
         cfg.ID = msg["id"]
         cfg.COLLECTION = msg["collectionName"]
-        cfg.DO_RECOGNITION = False
+        integration_stg.RUN_FACE_RECOGNITION = False
+        # cfg.DO_RECOGNITION = False
         cfg.ADD_NEW = True
     
     elif message.topic == userdata["face_recognition"]["TOPICS_FROM_BRAIN"]["DATA_UPDATED"]:
