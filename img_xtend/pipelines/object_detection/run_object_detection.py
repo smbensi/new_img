@@ -104,7 +104,7 @@ class ObjectDetectorClient:
             return()
         
         track = True
-        LOGGER.debug(f"{object_detection_settings.CLASS_FILTER=}")
+        # LOGGER.debug(f"{object_detection_settings.CLASS_FILTER=}")
         results = self.model.predict(img, class_filter=object_detection_settings.CLASS_FILTER, track=track)
         mqtt_msg = mqtt_msg_for_rock(results)
         
