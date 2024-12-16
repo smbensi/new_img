@@ -117,7 +117,7 @@ class Tracker:
                 follow_settings.MATCHES_SOURCE[matches_from] += 1
                 follow_settings.MATCHES_SOURCE["FRAMES"] += 1
                 add_embedding = add_new_detection(matches_from, cost_matrix_log, bboxes, *match_data.index_in_cost_matrix)
-                LOGGER.debug(f"{matches_from=} {cost_matrix_log=} {add_embedding=}")
+                # LOGGER.debug(f"{matches_from=} {cost_matrix_log=} {add_embedding=}")
                 if matches_from != self.last_matches_from and matches_from in follow_settings.MATCHES_TO_PRINT:
                     # LOGGER.debug(f"match from: {logs_matches_from}")
                     self.last_matches_from = matches_from

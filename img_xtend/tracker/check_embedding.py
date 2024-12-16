@@ -40,10 +40,10 @@ def add_new_detection(matches_from:str,cost_matrix, bboxes: List[Bbox], track_id
     iou_matrix = compute_iou_bboxes(bboxes)
     
     if not check_iou_in_present_frame(iou_matrix, bbox_idx):
-        LOGGER.debug("check_iou_in_present_frame")
+        # LOGGER.debug("check_iou_in_present_frame")
         return False
     if not are_shoulders_inside(bbox.keypoints):
-        LOGGER.debug("shoulders are not inside")
+        # LOGGER.debug("shoulders are not inside")
         return False
     if matches_from in ['APPEARANCE', 'MANUAL']:
         return is_in_appearance_interval(cost_matrix_element)

@@ -19,7 +19,7 @@ from img_xtend.pipelines.face_recognition.utils.get_data import (
 from img_xtend.pipelines.face_recognition.utils.face_dataclasses import UnknownFace, KnownFace
 from img_xtend.pipelines.face_recognition.configuration import config as cfg
 from img_xtend.tracker.matching.iou_matching import iou
-   
+
 def on_message(client, userdata, message):
     
     if message.topic == userdata["face_recognition"]["TOPICS_FROM_BRAIN"]["IS_ALIVE"]:
@@ -352,14 +352,14 @@ class FaceRecognitionClient():
                                                              frames=1,
                                                              last_seen=time.time(),
                                                              bbox=face_bbox)
-           
+
     def check_biggest(self,ids : List[str]):
         if len(ids) > 1:
             for id in ids[1:]:
                 if self.dict_known_faces[id].frames <= cfg.FRAMES_BEFORE_RECOGNITION and \
                     self.dict_known_faces[id].frames >= self.dict_known_faces[ids[0]].frames:
                     self.dict_known_faces[id].frames = 0
-                     
+
     def check_if_recognized_in_unrecognized(self, recognized_vec, face_bbox):
         keys_to_delete = []
         def to_tlwh(bbox):

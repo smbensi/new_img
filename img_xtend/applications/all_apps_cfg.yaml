@@ -4,7 +4,7 @@ INTEGRATION:
   LOAD_MODELS_OBJECT_DETECTION: True
   LOAD_MODELS_FOLLOW_ME: True
   LOAD_MODELS_FACE_RECOGNITON: True
-  RUN_FACE_RECOGNITION: True
+  RUN_FACE_RECOGNITION: False
   RUN_OBJECT_DETECTION: False
   RUN_FOLLOW_ME: False
   #mqtt params
@@ -14,6 +14,8 @@ INTEGRATION:
   keepalive: 240
 
 object_detection:  # for object_detection and follow me
+  tracker_config_file: img_xtend/tracker/config/config.yaml
+  tracker_name: STRONG_SORT
   # mqtt params
   TOPICS_FROM_BRAIN:
     ACTIVATE_DETECTION: /robot/from_brain/img/obj_detection

@@ -2,7 +2,6 @@ from pathlib import Path
 import os
 
 tracker_name = 'STRONG_SORT'
-bbox_output = 'numpy'
 
 FILE = Path(__file__).resolve()
 PACKAGE_ROOT = FILE.parents[1]
