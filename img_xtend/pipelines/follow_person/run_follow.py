@@ -26,13 +26,8 @@ from img_xtend.pipelines.follow_person import follow_settings, utils
 def on_message(client, userdata, message):
 
     decoded_message = (message.payload.decode("utf-8"))
-    LOGGER.debug(f"{decoded_message}")
-    LOGGER.debug(f"{userdata=}")
-    LOGGER.debug(f"{vars(client)=}")
-    LOGGER.debug(f"{client._username=}")
+    LOGGER.debug(f"topic={message.topic} msg={decoded_message}")
     
-    print(f"{userdata=}")
-    LOGGER.debug(f"{message.topic=}")
     
     if message.topic == userdata["object_detection"]["TOPICS_FROM_BRAIN"]["IS_ALIVE"]:
         client.publish(userdata["object_detection"]["TOPICS_TO_BRAIN"]["APP_ALIVE"],

@@ -22,6 +22,9 @@ from img_xtend.tracker.matching.iou_matching import iou
 
 def on_message(client, userdata, message):
     
+    decoded_message = (message.payload.decode("utf-8"))
+    LOGGER.debug(f"topic:{message.topic}, msg:{decoded_message}")
+    
     if message.topic == userdata["face_recognition"]["TOPICS_FROM_BRAIN"]["IS_ALIVE"]:
         client.publish(cfg.TOPICS_TO_BRAIN["APP_ALIVE"],json.dumps(cfg.msg_alive))
 
