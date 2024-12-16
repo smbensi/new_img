@@ -74,6 +74,7 @@ class LoadStreams:
         self.imgs = [[] for _ in range(n)] # images
         self.shape = [[] for _ in range(n)] # image shapes
         self.sources = [ops.clean_str(x) for x in sources] 
+        self.miss_frames = 0
         
         for i, s in enumerate(sources): # index, source
             # Start thread to read frames from video stream
@@ -158,7 +159,12 @@ class LoadStreams:
                 time.sleep(1 / min(self.fps))
                 x = self.imgs[i]
                 if not x:
-                    LOGGER.warning(f"WARNING waiting for stream {i}")
+                    LOGGER.warning(f"WARNING waiting for stream {self.sources}")
+                    self.miss_frames += 1
+                else:
+                    if self.miss_frames > 0:
+                        LOGGER.debug(f"stream back after {self.miss_frames} misses")
+                        self.miss_frames = 0
             
             # Get and remove the first frame from imgs buffer
             if self.buffer:
