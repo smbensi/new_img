@@ -68,7 +68,9 @@ def on_message(client, userdata, message):
             elif class_filter and isinstance(class_filter[0],str):
                 isnums = [el.isnumeric() for el in class_filter]
                 # print(isnum)
-            if class_filter and (all(isnums) or all(isints)):
+            if isinstance(class_filter,list) and len(class_filter)==0:
+                object_detection_settings.CLASS_FILTER=None
+            elif class_filter and (all(isnums) or all(isints)):
                 object_detection_settings.CLASS_FILTER = [int(el) for el in class_filter if int(el)<len(object_detection_settings.inverted_labels)]
             else:
                 object_detection_settings.CLASS_FILTER = [object_detection_settings.inverted_labels[el.strip()]
