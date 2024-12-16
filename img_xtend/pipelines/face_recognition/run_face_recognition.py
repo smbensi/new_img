@@ -74,7 +74,8 @@ def on_message(client, userdata, message):
             cfg.NULL_TIMEOUT = float(msg.get('idTimeout', cfg.DEFAULT_NULL_TIMEOUT))
             if cfg.NULL_TIMEOUT == 0:
                 cfg.NULL_TIMEOUT = 100_000
-            cfg.RECO_FACE.initialize_params(collectionNames=collectionNames)
+            cfg.reinit = True
+            # cfg.RECO_FACE.initialize_params(collectionNames=collectionNames)
             
             LOGGER.debug(f"PARAMS FOR NEW SEARCH: \nMSG_SPEED={cfg.MSG_SPEED} \nTIMEOUT={cfg.NULL_TIMEOUT} \nFRAMES FOR RECOGNITION={cfg.FRAMES_BEFORE_RECOGNITION}")
 
@@ -521,6 +522,9 @@ class FaceRecognitionClient():
         Args:
             img (_type_): _description_
         """
+        if cfg.reinit:
+            self.initialize_params(collectionNames=cfg.COLLECTION)
+            cfg.reinit = False
         face_vecs_in_frame = []
         for pose_result in pose_estimation_results:
             from img_xtend.pipelines.face_recognition.utils.find_face import get_face_from_pose

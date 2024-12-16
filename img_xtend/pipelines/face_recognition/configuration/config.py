@@ -9,6 +9,7 @@ with open(config_file, "r") as fo:
     config = yaml.load(fo.read(), Loader=yaml.FullLoader)
     
 THRESHOLD_DISTANCE_EYES = config["face_recognition"]["THRESHOLD_DISTANCE_EYES"]
+reinit = False
 ### ************************
 # MQTT PARAMETERS  
 #### ***********************
