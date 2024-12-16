@@ -1,6 +1,6 @@
 import json 
 
-from img_xtend.utils import is_docker
+from img_xtend.utils import is_docker, LOGGER
 
 CONFIDENCE = 0.5
 CLASS_FILTER = None
@@ -20,4 +20,5 @@ ids = [el["_id"] for el in list_of_objects]
 names = [el["name"] for el in list_of_objects]
 
 LABELS = dict(zip(ids, names))
+LOGGER.debug(f"OBJECT {LABELS=}")
 inverted_labels = dict(zip(names,ids))

@@ -123,7 +123,7 @@ def on_message(client, userdata, message):
     elif message.topic == userdata["face_recognition"]["TOPICS_FROM_BRAIN"]["CAM_ACTIVE"]:
         msg = message.payload.decode("utf-8")
         LOGGER.debug(f"Retry Stream Now on device {msg}")
-        cfg.INFO["RETRY_STREAM"] = True
+        # cfg.INFO["RETRY_STREAM"] = True
 
 class FaceRecognitionClient():
     """de quoi j'ai besoin:
