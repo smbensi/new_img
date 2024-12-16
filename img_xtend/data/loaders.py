@@ -159,12 +159,13 @@ class LoadStreams:
                 time.sleep(1 / min(self.fps))
                 x = self.imgs[i]
                 if not x:
-                    LOGGER.warning(f"WARNING waiting for stream {self.sources}")
+                    if self.miss_frames > 15:
+                        LOGGER.warning(f"WARNING waiting for stream {self.sources}")
                     self.miss_frames += 1
                 else:
-                    if self.miss_frames > 0:
+                    if self.miss_frames > 15:
                         LOGGER.debug(f"stream back after {self.miss_frames} misses")
-                        self.miss_frames = 0
+                    self.miss_frames = 0
             
             # Get and remove the first frame from imgs buffer
             if self.buffer:
