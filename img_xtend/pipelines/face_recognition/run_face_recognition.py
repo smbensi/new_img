@@ -26,7 +26,7 @@ def on_message(client, userdata, message):
     LOGGER.debug(f"topic:{message.topic}, msg:{decoded_message}")
     
     if message.topic == userdata["face_recognition"]["TOPICS_FROM_BRAIN"]["IS_ALIVE"]:
-        client.publish(cfg.TOPICS_TO_BRAIN["APP_ALIVE"],json.dumps(cfg.msg_alive))
+        client.publish(userdata["face_recognition"]["TOPICS_TO_BRAIN"]["APP_ALIVE"],json.dumps(cfg.msg_alive))
 
     elif message.topic == userdata["face_recognition"]["TOPICS_TO_BRAIN"]["APP_ALIVE"]:
         msg = message.payload.decode("utf-8")
@@ -120,7 +120,7 @@ def on_message(client, userdata, message):
             LOGGER.debug(f"***PROBLEM WITH DATA UPDATED***  and the error is {e}")
         # cfg.FACE_OBJ = FaceRecognition()
     
-    elif message.topic == cfg.TOPICS_FROM_BRAIN["CAM_ACTIVE"]:
+    elif message.topic == userdata["face_recognition"]["TOPICS_FROM_BRAIN"]["CAM_ACTIVE"]:
         msg = message.payload.decode("utf-8")
         LOGGER.debug(f"Retry Stream Now on device {msg}")
         cfg.INFO["RETRY_STREAM"] = True
@@ -150,7 +150,7 @@ class FaceRecognitionClient():
         self.recognition_model = recognition_model
         self.get_registered_faces()
         self.initialize_params()
-        
+        self.config = config
         # connect to mqtt
         self.use_mqtt = config.get("INTEGRATION",False).get("use_mqtt",False)
         if self.use_mqtt:
@@ -481,7 +481,7 @@ class FaceRecognitionClient():
             LOGGER.debug(f"{self.dict_known_faces=} \n{self.list_unknown_faces=}")
             if self.mqtt_client is not None:
                 self.mqtt_client.publish(
-                            cfg.TOPICS_TO_BRAIN["FACE_RECOGNITION"], msg)
+                            self.config["face_recognition"]["TOPICS_TO_BRAIN"]["FACE_RECOGNITION"], msg)
                 
             self.last_time_published = time.time()  
             self.last_published_recognized_ids = recognized_ids_to_publish    

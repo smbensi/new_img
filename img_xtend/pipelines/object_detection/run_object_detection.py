@@ -5,6 +5,7 @@ import numpy as np
 
 from img_xtend.utils import LOGGER
 from img_xtend.mqtt import mqtt_handler, mqtt_settings
+from img_xtend.settings import integration_stg
 from img_xtend.detection.yolo_predictor import YoloV8
 from img_xtend.detection.bbox import Bbox
 from img_xtend.pipelines.object_detection import object_detection_settings
@@ -52,8 +53,10 @@ def on_message(client, userdata, message):
         
         if decoded_message["obj_detection"] == "off":
             object_detection_settings.RUN_DETECTION = False
+            integration_stg.RUN_DETECTION = False
             
         elif decoded_message["obj_detection"] == "on":
+            integration_stg.RUN_DETECTION = True
             object_detection_settings.RUN_DETECTION = True
             class_filter = decoded_message.get("filter",[]) # get the filter for which labels to detect
             print(f"{class_filter=}")
